@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <MonoGamePath>D:\SteamLibrary\steamapps\common\Schedule I_alternate</MonoGamePath>
+    <Il2CppGamePath>D:\SteamLibrary\steamapps\common\Schedule I_public</Il2CppGamePath>
+
+    <MonoAssembliesPath>$(MonoGamePath)\Schedule I_Data\Managed</MonoAssembliesPath>
+    <MonoMelonLoaderPath>$(MonoGamePath)\MelonLoader\net35</MonoMelonLoaderPath>
+    <Il2CppAssembliesPath>$(Il2CppGamePath)\MelonLoader\Il2CppAssemblies</Il2CppAssembliesPath>
+    <Il2CppMelonLoaderPath>$(Il2CppGamePath)\MelonLoader\net6</Il2CppMelonLoaderPath>
+
+    <S1ApiMonoPath>..\S1API\S1API\bin\MonoMelon\netstandard2.1\S1API.dll</S1ApiMonoPath>
+    <S1ApiIl2CppPath>..\S1API\S1API\bin\Il2CppMelon\net6.0\S1API.dll</S1ApiIl2CppPath>
+    <MApiMonoPath>..\MAPI\bin\Mono\netstandard2.1\S1MAPI_Mono.dll</MApiMonoPath>
+    <MApiIl2CppPath>..\MAPI\bin\Il2cpp\net6.0\S1MAPI_Il2cpp.dll</MApiIl2CppPath>
+  </PropertyGroup>
+</Project>
+
