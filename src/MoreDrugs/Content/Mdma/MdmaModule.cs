@@ -1,4 +1,5 @@
 #if IL2CPPMELON
+using Il2CppInterop.Runtime.InteropTypes;
 using S1 = Il2CppScheduleOne;
 using S1Product = Il2CppScheduleOne.Product;
 #elif MONOMELON
@@ -320,8 +321,8 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         ProductPresentationTransform pillPose)
     {
         S1Product.ProductDefinition nativeTemplate =
-            S1.Registry.GetItem("ogkush") as S1Product.ProductDefinition ??
-            S1.Registry.GetItem("weed") as S1Product.ProductDefinition ??
+            GetNativeProductDefinition("ogkush") ??
+            GetNativeProductDefinition("weed") ??
             throw new InvalidOperationException(
                 "Cannot create the MDMA consumption prefab without a native product scaffold.");
         GameObject consumptionSource =
@@ -340,5 +341,15 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         consumePill.SetActive(true);
         consumptionSource.SetActive(true);
         return consumptionSource;
+    }
+
+    private static S1Product.ProductDefinition? GetNativeProductDefinition(
+        string itemId)
+    {
+#if IL2CPPMELON
+        return S1.Registry.GetItem(itemId)?.TryCast<S1Product.ProductDefinition>();
+#else
+        return S1.Registry.GetItem(itemId) as S1Product.ProductDefinition;
+#endif
     }
 }
