@@ -73,6 +73,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private bool _tabletPressAddedToShop;
     private bool _tabletPressIconGenerated;
     private bool _crystalIconGenerated;
+    private bool _crystalPresentationConfigured;
 
     internal MdmaModule(MelonLogger.Instance logger)
     {
@@ -116,7 +117,6 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 
         _definition = CreateBuilder(template, baggie, jar).Build();
         _crystalDefinition = CreateCrystalBuilder().Build();
-        ConfigureCrystalPresentation(crystalSource);
         _tabletPressIcon ??=
             ImageUtils.LoadImageFromResource(
                 typeof(MdmaModule).Assembly,
@@ -163,6 +163,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 .WithProduct(
                     MdmaProductIds.Crystals,
                     ManualTabletPressQuantities.ChemistryCrystalYield));
+        TryConfigureCrystalPresentation(crystalSource);
 
         _logger.Msg(
             $"Registered MDMA crystal intermediate '{MdmaProductIds.Crystals}', " +
@@ -178,6 +179,10 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             _productKind == null)
             return;
 
+        TryConfigureCrystalPresentation(_mdmaCrystals.GetOrLoad());
+        TryGenerateCrystalIcon();
+        TryGenerateTabletPressIcon();
+
         if (_metadata == null)
         {
             Sprite icon = _definition.Icon;
@@ -185,23 +190,22 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             {
                 _logger.Warning(
                     "MDMA icon generation has not completed; Product Manager metadata will retry on the next load.");
-                return;
             }
-
-            _metadata =
-                new ProductKindMetadataBuilder(_productKind)
-                    .WithDisplayName("MDMA")
-                    .WithColor(new Color(0.95f, 0.3f, 0.65f))
-                    .WithIcon(icon)
-                    .WithSortOrder(100)
-                    .WithSearchAliases("ecstasy", "molly", "pill")
-                    .WithProductManagerVisibility()
-                    .Build();
+            else
+            {
+                _metadata =
+                    new ProductKindMetadataBuilder(_productKind)
+                        .WithDisplayName("MDMA")
+                        .WithColor(new Color(0.95f, 0.3f, 0.65f))
+                        .WithIcon(icon)
+                        .WithSortOrder(100)
+                        .WithSearchAliases("ecstasy", "molly", "pill")
+                        .WithProductManagerVisibility()
+                        .Build();
+            }
         }
 
         _definition.Discover(listForSale: true);
-        TryGenerateCrystalIcon();
-        TryGenerateTabletPressIcon();
 
         if (!_tabletPressAddedToShop)
         {
@@ -314,7 +318,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         CreateCrystalBuilder()
     {
         return S1API.Items.Quality.QualityItemCreator
-            .CloneFrom("cocaleaf")
+            .CloneFrom("cocainebase")
             .WithBasicInfo(
                 MdmaProductIds.Crystals,
                 "MDMA Crystals",
@@ -413,23 +417,44 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             _jarProfile);
     }
 
-    private void ConfigureCrystalPresentation(GameObject crystalSource)
+    private void TryConfigureCrystalPresentation(GameObject crystalSource)
     {
-        S1ItemFramework.QualityItemDefinition definition =
-            GetNativeQualityDefinition(MdmaProductIds.Crystals) ??
-            throw new InvalidOperationException(
-                "The registered MDMA crystal definition is unavailable.");
-        S1ItemFramework.QualityItemDefinition template =
-            GetNativeQualityDefinition("cocaleaf") ??
-            throw new InvalidOperationException(
-                "The native coca-leaf presentation scaffold is unavailable.");
+        if (_crystalPresentationConfigured)
+            return;
 
-        definition.StoredItem =
-            CloneCrystalStoredItem(template, crystalSource);
-        definition.StationItem =
-            CloneCrystalStationItem(template, crystalSource);
-        definition.Equippable =
-            CloneCrystalEquippable(template, crystalSource);
+        try
+        {
+            S1ItemFramework.QualityItemDefinition definition =
+                GetNativeQualityDefinition(MdmaProductIds.Crystals) ??
+                throw new InvalidOperationException(
+                    "The registered MDMA crystal definition is unavailable.");
+            S1ItemFramework.QualityItemDefinition template =
+                GetNativeQualityDefinition("cocainebase") ??
+                throw new InvalidOperationException(
+                    "The native cocaine-base presentation scaffold is unavailable.");
+
+            S1Storage.StoredItem stored =
+                CloneCrystalStoredItem(template, crystalSource);
+            S1Equipping.Equippable equippable =
+                CloneCrystalEquippable(template, crystalSource);
+            S1StationFramework.StationItem? station =
+                template.StationItem == null
+                    ? null
+                    : CloneCrystalStationItem(
+                        template.StationItem,
+                        crystalSource);
+
+            definition.StoredItem = stored;
+            definition.Equippable = equippable;
+            definition.StationItem = station;
+            _crystalPresentationConfigured = true;
+        }
+        catch (Exception exception)
+        {
+            _logger.Warning(
+                "MDMA crystal presentation could not be applied yet; " +
+                $"native quality-item visuals will remain as a fallback: {exception.Message}");
+        }
     }
 
     private static ProductPresentationTransform JarPlacement(
@@ -460,11 +485,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     }
 
     private static S1StationFramework.StationItem CloneCrystalStationItem(
-        S1ItemFramework.QualityItemDefinition template,
+        S1StationFramework.StationItem template,
         GameObject crystalSource)
     {
         S1StationFramework.StationItem station =
-            UnityEngine.Object.Instantiate(template.StationItem);
+            UnityEngine.Object.Instantiate(template);
         PrepareCrystalPrefab(
             station.gameObject,
             "MoreDrugs_MDMA_Crystals_Station");
