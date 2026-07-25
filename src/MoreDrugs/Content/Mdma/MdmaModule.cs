@@ -33,16 +33,23 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 
     private const string HeartPillResource =
         "MoreDrugs.Assets.Models.heartpill.glb";
+    private const string MdmaCrystalsResource =
+        "MoreDrugs.Assets.Models.mdma_crystals.glb";
 
     private readonly MelonLogger.Instance _logger;
     private readonly EmbeddedGlbAsset _heartPill =
         new EmbeddedGlbAsset(HeartPillResource, "MoreDrugs_HeartPill");
+    private readonly EmbeddedGlbAsset _mdmaCrystals =
+        new EmbeddedGlbAsset(MdmaCrystalsResource, "MoreDrugs_MdmaCrystals");
     private readonly ManualTabletPressAsset _tabletPressAsset = new();
 
     private ProductKind? _productKind;
     private ProductPresentationProfile? _presentationProfile;
+    private ProductPresentationProfile? _crystalPresentationProfile;
     private ProductPackagingContentProfile? _baggieProfile;
     private ProductPackagingContentProfile? _jarProfile;
+    private ProductPackagingContentProfile? _crystalBaggieProfile;
+    private ProductPackagingContentProfile? _crystalJarProfile;
     private CustomProductDefinition? _definition;
     private CustomProductDefinition? _crystalDefinition;
     private S1API.Items.Buildable.BuildableItemDefinition? _tabletPressDefinition;
@@ -88,8 +95,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 .Build();
 
         GameObject pillSource = _heartPill.GetOrLoad();
+        GameObject crystalSource = _mdmaCrystals.GetOrLoad();
         EnsurePresentationRegistered(template, pillSource);
+        EnsureCrystalPresentationRegistered(crystalSource);
         EnsurePackagingRegistered(pillSource);
+        EnsureCrystalPackagingRegistered(crystalSource);
         RegisterMixing(_productKind);
 
         _definition = CreateBuilder(template, baggie, jar).Build();
@@ -111,6 +121,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         ManualTabletPressRuntime.Configure(
             _tabletPressAsset,
             () => _heartPill.GetOrLoad(),
+            () => _mdmaCrystals.GetOrLoad(),
             _logger);
 
         _recipe ??=
@@ -219,8 +230,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 .Build();
 
         GameObject pillSource = _heartPill.GetOrLoad();
+        GameObject crystalSource = _mdmaCrystals.GetOrLoad();
         EnsurePresentationRegistered(template, pillSource);
+        EnsureCrystalPresentationRegistered(crystalSource);
         EnsurePackagingRegistered(pillSource);
+        EnsureCrystalPackagingRegistered(crystalSource);
         return isTablets
             ? CreateBuilder(template, baggie, jar)
             : CreateCrystalBuilder(template, baggie, jar);
@@ -234,6 +248,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         _consumptionSource = null;
         ManualTabletPressRuntime.Reset();
         _tabletPressAsset.Dispose();
+        _mdmaCrystals.Dispose();
         _heartPill.Dispose();
     }
 
@@ -392,6 +407,75 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ProductId,
             "jar",
             _jarProfile);
+    }
+
+    private void EnsureCrystalPresentationRegistered(GameObject crystalSource)
+    {
+        ProductPresentationTransform loosePose =
+            new ProductPresentationTransform(
+                Vector3.zero,
+                Vector3.zero,
+                Vector3.one);
+        ProductPresentationTransform heldPose =
+            new ProductPresentationTransform(
+                new Vector3(0f, 0f, 0.01f),
+                new Vector3(18f, -10f, 12f),
+                Vector3.one * 0.75f);
+
+        _crystalPresentationProfile ??=
+            new ProductPresentationProfileBuilder()
+                .WithLooseVisual(() => crystalSource, loosePose)
+                .WithHeldVisual(() => crystalSource, heldPose)
+                .WithGeneratedIconFromLooseVisual(
+                    size: 512,
+                    fitToCamera: true,
+                    cameraFill: 0.72f)
+                .Require(
+                    ProductPresentationContext.Loose,
+                    ProductPresentationContext.Stored,
+                    ProductPresentationContext.Held,
+                    ProductPresentationContext.Station,
+                    ProductPresentationContext.FunctionalProduct,
+                    ProductPresentationContext.Icon)
+                .Build();
+
+        ProductPresentationProfileRegistry.RegisterForProduct(
+            ModInfo.OwnerId,
+            MdmaProductIds.Crystals,
+            _crystalPresentationProfile);
+    }
+
+    private void EnsureCrystalPackagingRegistered(GameObject crystalSource)
+    {
+        _crystalBaggieProfile ??=
+            new ProductPackagingContentProfileBuilder()
+                .WithContent(() => crystalSource)
+                .AddPlacement(
+                    new ProductPresentationTransform(
+                        new Vector3(0f, -0.004f, 0f),
+                        Vector3.zero,
+                        Vector3.one * 0.52f))
+                .Build();
+        _crystalJarProfile ??=
+            new ProductPackagingContentProfileBuilder()
+                .WithContent(() => crystalSource)
+                .AddPlacement(
+                    new ProductPresentationTransform(
+                        new Vector3(0f, 0.035f, 0f),
+                        new Vector3(0f, 18f, 0f),
+                        Vector3.one * 0.58f))
+                .Build();
+
+        ProductPackagingContentProfileRegistry.Register(
+            ModInfo.OwnerId,
+            MdmaProductIds.Crystals,
+            "baggie",
+            _crystalBaggieProfile);
+        ProductPackagingContentProfileRegistry.Register(
+            ModInfo.OwnerId,
+            MdmaProductIds.Crystals,
+            "jar",
+            _crystalJarProfile);
     }
 
     private static ProductPresentationTransform JarPlacement(

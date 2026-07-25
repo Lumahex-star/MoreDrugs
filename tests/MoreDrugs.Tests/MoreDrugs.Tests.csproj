@@ -25,5 +25,8 @@
     <None Include="..\..\src\MoreDrugs\Assets\Models\manual_tablet_press.glb"
           Link="Assets\manual_tablet_press.glb"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MoreDrugs\Assets\Models\mdma_crystals.glb"
+          Link="Assets\mdma_crystals.glb"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

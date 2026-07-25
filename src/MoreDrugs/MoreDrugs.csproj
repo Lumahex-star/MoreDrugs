@@ -62,6 +62,8 @@
                       LogicalName="MoreDrugs.Assets.Models.heartpill.glb" />
     <EmbeddedResource Include="Assets\Models\manual_tablet_press.glb"
                       LogicalName="MoreDrugs.Assets.Models.manual_tablet_press.glb" />
+    <EmbeddedResource Include="Assets\Models\mdma_crystals.glb"
+                      LogicalName="MoreDrugs.Assets.Models.mdma_crystals.glb" />
   </ItemGroup>
 
   <Target Name="ValidateBuildPaths" BeforeTargets="ResolveReferences">

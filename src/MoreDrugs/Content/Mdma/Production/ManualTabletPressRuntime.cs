@@ -42,17 +42,21 @@ internal static class ManualTabletPressRuntime
 
     private static ManualTabletPressAsset? _pressAsset;
     private static Func<GameObject>? _pillSourceFactory;
+    private static Func<GameObject>? _crystalSourceFactory;
     private static MelonLogger.Instance? _logger;
 
     internal static void Configure(
         ManualTabletPressAsset pressAsset,
         Func<GameObject> pillSourceFactory,
+        Func<GameObject> crystalSourceFactory,
         MelonLogger.Instance logger)
     {
         _pressAsset = pressAsset ??
             throw new ArgumentNullException(nameof(pressAsset));
         _pillSourceFactory = pillSourceFactory ??
             throw new ArgumentNullException(nameof(pillSourceFactory));
+        _crystalSourceFactory = crystalSourceFactory ??
+            throw new ArgumentNullException(nameof(crystalSourceFactory));
         _logger = logger ??
             throw new ArgumentNullException(nameof(logger));
     }
@@ -61,6 +65,7 @@ internal static class ManualTabletPressRuntime
     {
         _pressAsset = null;
         _pillSourceFactory = null;
+        _crystalSourceFactory = null;
         _logger = null;
     }
 
@@ -84,7 +89,10 @@ internal static class ManualTabletPressRuntime
         if (!IsTabletPress(press) || Instances.TryGetValue(press, out _))
             return;
 
-        if (_pressAsset == null || _pillSourceFactory == null || _logger == null)
+        if (_pressAsset == null ||
+            _pillSourceFactory == null ||
+            _crystalSourceFactory == null ||
+            _logger == null)
         {
             MelonLogger.Warning(
                 "Skipped Manual Tablet Press visuals because runtime assets are not configured.");
@@ -98,7 +106,8 @@ internal static class ManualTabletPressRuntime
                 new ManualTabletPressInstance(
                     press,
                     _pressAsset,
-                    _pillSourceFactory));
+                    _pillSourceFactory,
+                    _crystalSourceFactory));
         }
         catch (Exception exception)
         {
@@ -122,7 +131,7 @@ internal static class ManualTabletPressRuntime
             HideNativeRenderers(ghost.gameObject);
             ManualTabletPressRig rig = _pressAsset.CreateInstance(ghost.transform);
             DisableReferenceAnimation(rig.Root);
-            DisableReferenceTablets(rig.Root);
+            DisableReferenceProcessVisuals(rig.Root);
         }
         catch (Exception exception)
         {
@@ -358,7 +367,7 @@ internal static class ManualTabletPressRuntime
         }
     }
 
-    private static void DisableReferenceTablets(GameObject root)
+    private static void DisableReferenceProcessVisuals(GameObject root)
     {
         foreach (Transform transform in root.GetComponentsInChildren<Transform>(true))
         {
@@ -368,6 +377,14 @@ internal static class ManualTabletPressRuntime
                 string.Equals(
                     transform.name,
                     "FreshTabletAssembly",
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    transform.name,
+                    "FeedPowderAssembly",
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    transform.name,
+                    "DieFillAssembly",
                     StringComparison.Ordinal))
             {
                 transform.gameObject.SetActive(false);
@@ -469,6 +486,9 @@ internal sealed class ManualTabletPressInstance
     private readonly S1ObjectScripts.BrickPress _press;
     private readonly Func<GameObject> _pillSourceFactory;
     private readonly ManualTabletPressRig _rig;
+    private readonly GameObject _hopperCrystals;
+    private readonly GameObject _shoeGranules;
+    private readonly GameObject _dieGranules;
     private readonly Quaternion _handleHomeRotation;
     private readonly Vector3 _ramRaised;
     private readonly Vector3 _ramLowered;
@@ -485,7 +505,8 @@ internal sealed class ManualTabletPressInstance
     internal ManualTabletPressInstance(
         S1ObjectScripts.BrickPress press,
         ManualTabletPressAsset asset,
-        Func<GameObject> pillSourceFactory)
+        Func<GameObject> pillSourceFactory,
+        Func<GameObject> crystalSourceFactory)
     {
         _press = press;
         _pillSourceFactory = pillSourceFactory;
@@ -493,7 +514,37 @@ internal sealed class ManualTabletPressInstance
         HideNativeRenderers(press.gameObject);
         _rig = asset.CreateInstance(press.transform);
         DisableReferenceAnimation(_rig.Root);
-        DisableReferenceTablets(_rig.Root);
+        DisableReferenceProcessVisuals(_rig.Root);
+        GameObject crystalSource = crystalSourceFactory();
+        _hopperCrystals =
+            CreateCrystalVisual(
+                crystalSource,
+                "MoreDrugs_HopperCrystals",
+                _rig.Root.transform,
+                Require(_rig.Root, "PowderHopperRim"),
+                0.75f,
+                -0.009f,
+                "CrystalPile",
+                "CrystalChunk_A",
+                "CrystalChunk_B");
+        _shoeGranules =
+            CreateCrystalVisual(
+                crystalSource,
+                "MoreDrugs_FeedGranules",
+                _rig.FeedShoeAssembly,
+                Require(_rig.Root, "FeedPowder"),
+                0.58f,
+                0.002f,
+                "CrystalGranules");
+        _dieGranules =
+            CreateCrystalVisual(
+                crystalSource,
+                "MoreDrugs_DieGranules",
+                _rig.Root.transform,
+                Require(_rig.Root, "DiePowderFill"),
+                0.52f,
+                0.002f,
+                "CrystalGranules");
 
         _handleHomeRotation = _rig.HandlePivot.localRotation;
         _ramRaised =
@@ -579,8 +630,9 @@ internal sealed class ManualTabletPressInstance
             hasCrystals &&
             progress >= 0.28f &&
             progress < 0.82f;
-        _rig.FeedPowderAssembly.gameObject.SetActive(powderInShoe);
-        _rig.DieFillAssembly.gameObject.SetActive(powderInDie);
+        _hopperCrystals.SetActive(hasCrystals);
+        _shoeGranules.SetActive(powderInShoe);
+        _dieGranules.SetActive(powderInDie);
     }
 
     private void ObserveOutput()
@@ -731,6 +783,58 @@ internal sealed class ManualTabletPressInstance
         return tablet;
     }
 
+    private GameObject CreateCrystalVisual(
+        GameObject source,
+        string name,
+        Transform visualParent,
+        Transform anchor,
+        float scale,
+        float verticalOffset,
+        params string[] visibleVariants)
+    {
+        var visible = new HashSet<string>(
+            visibleVariants,
+            StringComparer.Ordinal);
+        GameObject visual = UnityEngine.Object.Instantiate(source);
+        visual.name = name;
+        visual.transform.SetParent(visualParent, false);
+        visual.transform.position =
+            anchor.position + _rig.Root.transform.up * verticalOffset;
+        visual.transform.rotation = _rig.Root.transform.rotation;
+        visual.transform.localScale = Vector3.one * scale;
+        visual.layer = LayerMask.NameToLayer("Ignore Raycast");
+
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Transform transform in
+                 visual.GetComponentsInChildren<Transform>(true))
+        {
+            if (!IsCrystalVariant(transform.name))
+                continue;
+
+            bool enabled = visible.Contains(transform.name);
+            transform.gameObject.SetActive(enabled);
+            if (enabled)
+                found.Add(transform.name);
+        }
+
+        if (!found.SetEquals(visible))
+        {
+            UnityEngine.Object.Destroy(visual);
+            throw new InvalidOperationException(
+                $"The MDMA crystal model is missing variants: " +
+                $"{string.Join(", ", visible.Except(found))}.");
+        }
+
+        foreach (Collider collider in
+                 visual.GetComponentsInChildren<Collider>(true))
+        {
+            UnityEngine.Object.Destroy(collider);
+        }
+
+        visual.SetActive(false);
+        return visual;
+    }
+
     private void RebuildSettledTablets(int outputQuantity)
     {
         DestroyAllTablets();
@@ -834,6 +938,17 @@ internal sealed class ManualTabletPressInstance
         return null;
     }
 
+    private static Transform Require(GameObject root, string name) =>
+        Find(root, name) ??
+        throw new InvalidOperationException(
+            $"The tablet press model is missing visual anchor '{name}'.");
+
+    private static bool IsCrystalVariant(string name) =>
+        string.Equals(name, "CrystalPile", StringComparison.Ordinal) ||
+        string.Equals(name, "CrystalChunk_A", StringComparison.Ordinal) ||
+        string.Equals(name, "CrystalChunk_B", StringComparison.Ordinal) ||
+        string.Equals(name, "CrystalGranules", StringComparison.Ordinal);
+
     private static Vector3 QuadraticBezier(
         Vector3 start,
         Vector3 control,
@@ -870,7 +985,7 @@ internal sealed class ManualTabletPressInstance
         }
     }
 
-    private static void DisableReferenceTablets(GameObject root)
+    private static void DisableReferenceProcessVisuals(GameObject root)
     {
         foreach (Transform transform in root.GetComponentsInChildren<Transform>(true))
         {
@@ -880,6 +995,14 @@ internal sealed class ManualTabletPressInstance
                 string.Equals(
                     transform.name,
                     "FreshTabletAssembly",
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    transform.name,
+                    "FeedPowderAssembly",
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    transform.name,
+                    "DieFillAssembly",
                     StringComparison.Ordinal))
             {
                 transform.gameObject.SetActive(false);
