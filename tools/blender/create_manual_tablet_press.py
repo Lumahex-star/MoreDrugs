@@ -20,11 +20,13 @@ from mathutils import Vector
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Models"
+ICON_DIR = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Icons"
 SOURCE_DIR = REPO_ROOT / "assets" / "source"
 PREVIEW_DIR = REPO_ROOT / "artifacts" / "previews" / "manual-tablet-press"
 
 BLEND_PATH = SOURCE_DIR / "manual_tablet_press.blend"
 GLB_PATH = MODEL_DIR / "manual_tablet_press.glb"
+INVENTORY_ICON_PATH = ICON_DIR / "manual_tablet_press.png"
 HERO_PREVIEW_PATH = PREVIEW_DIR / "manual_tablet_press_hero.png"
 
 FRAME_IDLE = 1
@@ -253,7 +255,13 @@ def extruded_profile(
     editable_mesh = bmesh.new()
     editable_mesh.from_mesh(mesh)
     profile_caps = [
-        face for face in editable_mesh.faces if len(face.verts) == count
+        face
+        for face in editable_mesh.faces
+        if len(face.verts) == count
+        and (
+            max(vertex.co.y for vertex in face.verts) -
+            min(vertex.co.y for vertex in face.verts)
+        ) < 1e-6
     ]
     if len(profile_caps) != 2:
         editable_mesh.free()
@@ -532,14 +540,17 @@ def validate_authored_contacts() -> None:
 
 
 def create_press() -> bpy.types.Object:
-    cast_green = make_material("CastIronGreen", (0.075, 0.19, 0.12, 1), 0.72, 0.40)
-    dark_green = make_material("DarkGreen", (0.028, 0.085, 0.052, 1), 0.78, 0.34)
-    steel = make_material("MachinedSteel", (0.42, 0.48, 0.50, 1), 0.88, 0.23)
-    dark_steel = make_material("DarkSteel", (0.055, 0.065, 0.070, 1), 0.90, 0.27)
-    brass = make_material("Brass", (0.50, 0.28, 0.065, 1), 0.82, 0.25)
-    rubber = make_material("Rubber", (0.012, 0.016, 0.018, 1), 0.02, 0.76)
-    enamel = make_material("Enamel", (0.77, 0.70, 0.50, 1), 0.22, 0.42)
-    pill_pink = make_material("TabletPink", (0.95, 0.035, 0.43, 1), 0.06, 0.30)
+    # Schedule I imports these factors directly into URP Lit. Painted cast iron
+    # must remain mostly dielectric; high metallic values only looked correct
+    # under the Blender studio lights and became nearly black in game.
+    cast_green = make_material("CastIronGreen", (0.10, 0.24, 0.15, 1), 0.05, 0.62)
+    dark_green = make_material("DarkGreen", (0.04, 0.11, 0.065, 1), 0.04, 0.68)
+    steel = make_material("MachinedSteel", (0.42, 0.46, 0.48, 1), 0.46, 0.38)
+    dark_steel = make_material("DarkSteel", (0.07, 0.08, 0.085, 1), 0.34, 0.48)
+    brass = make_material("Brass", (0.52, 0.30, 0.07, 1), 0.55, 0.34)
+    rubber = make_material("Rubber", (0.015, 0.020, 0.022, 1), 0.0, 0.82)
+    enamel = make_material("Enamel", (0.72, 0.65, 0.48, 1), 0.04, 0.46)
+    pill_pink = make_material("TabletPink", (0.90, 0.04, 0.40, 1), 0.02, 0.36)
     powder = make_material("Powder", (0.98, 0.58, 0.77, 1), 0.0, 0.82)
 
     root = empty("ManualTabletPress")
@@ -646,10 +657,27 @@ def create_press() -> bpy.types.Object:
         box("BaseRailFront", (-0.05, -0.60, 0.08), (2.08, 0.18, 0.16), dark_green, bevel=0.035),
         box("BaseRailRear", (-0.05, 0.70, 0.08), (2.08, 0.18, 0.16), dark_green, bevel=0.035),
         box("PressHead", (0.44, -0.02, 2.33), (0.76, 0.92, 0.72), dark_green, bevel=0.065),
-        box("BedSupport", (-0.10, 0.08, 0.72), (1.40, 0.72, 0.26), dark_green, bevel=0.050),
         box("WorkTable", (0.16, -0.03, 0.89), (1.05, 0.86, 0.16), steel, bevel=0.028),
     ):
         parent_keep_transform(obj, static)
+
+    # Follow the C-frame's sloped inner edge instead of pushing a rectangular
+    # support through it. The small clearance avoids coplanar z-fighting while
+    # preserving a visually flush mechanical seam.
+    bed_support = extruded_profile(
+        "BedSupport",
+        [
+            (-0.556, 0.59),
+            (0.60, 0.59),
+            (0.60, 0.85),
+            (-0.711, 0.85),
+        ],
+        depth=0.72,
+        center_y=0.08,
+        mat=dark_green,
+        bevel=0.040,
+    )
+    parent_keep_transform(bed_support, static)
 
     for x, z in ((0.18, 2.10), (0.68, 2.10), (0.18, 2.56), (0.68, 2.56)):
         add_fastener(f"HeadFastener_{x:.2f}_{z:.2f}", x, z, steel, brass, static)
@@ -1288,7 +1316,7 @@ def create_press() -> bpy.types.Object:
 
     root.scale = (0.36, 0.36, 0.36)
     root["asset_name"] = "MoreDrugs Manual Tablet Press"
-    root["asset_version"] = 2
+    root["asset_version"] = 3
     root["license"] = "GPL-3.0-or-later"
     root["design"] = "Original MoreDrugs geometry"
     root["front_axis"] = "-Y"
@@ -1323,9 +1351,9 @@ def add_hero_scene() -> None:
 
     for index, (location, energy, color, size) in enumerate(
         (
-            ((-1.3, -1.8, 2.3), 1100, (1.0, 0.82, 0.70), 2.5),
-            ((1.6, -0.5, 1.4), 750, (0.50, 0.70, 1.0), 1.8),
-            ((-0.4, 1.7, 1.8), 900, (1.0, 0.26, 0.48), 1.4),
+            ((-1.3, -1.8, 2.3), 700, (1.0, 0.82, 0.70), 2.5),
+            ((1.6, -0.5, 1.4), 450, (0.50, 0.70, 1.0), 1.8),
+            ((-0.4, 1.7, 1.8), 550, (1.0, 0.26, 0.48), 1.4),
         )
     ):
         bpy.ops.object.light_add(type="AREA", location=location)
@@ -1349,6 +1377,7 @@ def add_hero_scene() -> None:
 
 def save_export_and_render(root: bpy.types.Object) -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    ICON_DIR.mkdir(parents=True, exist_ok=True)
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(BLEND_PATH))
@@ -1375,6 +1404,27 @@ def save_export_and_render(root: bpy.types.Object) -> None:
 
     bpy.context.scene.frame_set(FRAME_IDLE)
     bpy.ops.render.render(write_still=True)
+    render_inventory_icon()
+
+
+def render_inventory_icon() -> None:
+    scene = bpy.context.scene
+    ground = bpy.data.objects.get("PreviewGround")
+    if ground is not None:
+        ground.hide_render = True
+
+    for name in ("PreviewLight_1", "PreviewLight_2", "PreviewLight_3"):
+        light = bpy.data.objects.get(name)
+        if light is not None:
+            light.data.color = (1.0, 1.0, 1.0)
+
+    scene.render.resolution_x = 512
+    scene.render.resolution_y = 512
+    scene.render.resolution_percentage = 100
+    scene.render.film_transparent = True
+    scene.render.image_settings.color_mode = "RGBA"
+    scene.render.filepath = str(INVENTORY_ICON_PATH)
+    bpy.ops.render.render(write_still=True)
 
 
 def main() -> None:
@@ -1392,6 +1442,7 @@ def main() -> None:
     print(f"Created {len(meshes)} source mesh objects ({source_triangles} pre-modifier triangles).")
     print(f"Blend: {BLEND_PATH}")
     print(f"GLB: {GLB_PATH}")
+    print(f"Inventory icon: {INVENTORY_ICON_PATH}")
     print(f"Hero preview: {HERO_PREVIEW_PATH}")
 
 

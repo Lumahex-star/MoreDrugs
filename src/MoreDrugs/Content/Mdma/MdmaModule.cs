@@ -18,6 +18,7 @@ using S1API.Properties;
 using S1API.Rendering;
 using S1API.Shops;
 using S1API.Stations;
+using S1API.Utils;
 using UnityEngine;
 
 namespace MoreDrugs.Content.Mdma;
@@ -35,6 +36,8 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         "MoreDrugs.Assets.Models.heartpill.glb";
     private const string MdmaCrystalsResource =
         "MoreDrugs.Assets.Models.mdma_crystals.glb";
+    private const string TabletPressIconResource =
+        "MoreDrugs.Assets.Icons.manual_tablet_press.png";
 
     private readonly MelonLogger.Instance _logger;
     private readonly EmbeddedGlbAsset _heartPill =
@@ -57,6 +60,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private ProductKindMetadata? _metadata;
     private ProductMixingProfile? _mixingProfile;
     private GameObject? _consumptionSource;
+    private Sprite? _tabletPressIcon;
     private bool _tabletPressAddedToShop;
     private bool _tabletPressIconGenerated;
 
@@ -104,7 +108,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 
         _definition = CreateBuilder(template, baggie, jar).Build();
         _crystalDefinition = CreateCrystalBuilder(template, baggie, jar).Build();
-        _tabletPressDefinition =
+        _tabletPressIcon ??=
+            ImageUtils.LoadImageFromResource(
+                typeof(MdmaModule).Assembly,
+                TabletPressIconResource);
+        S1API.Items.Buildable.BuildableItemDefinitionBuilder tabletPressBuilder =
             S1API.Items.Buildable.BuildableItemCreator.CloneFrom("brickpress")
                 .WithBasicInfo(
                     TabletPressItemId,
@@ -112,8 +120,13 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     "A hand-operated press for converting MDMA crystals into tablets.",
                     ItemCategory.Equipment)
                 .WithBuildSound(S1API.Items.Buildable.BuildSoundType.Metal)
-                .WithPricing(2_500f, 0.5f)
-                .Build();
+                .WithPricing(2_500f, 0.5f);
+        if (_tabletPressIcon != null)
+        {
+            tabletPressBuilder.WithIcon(_tabletPressIcon);
+            _tabletPressIconGenerated = true;
+        }
+        _tabletPressDefinition = tabletPressBuilder.Build();
 
         ConsoleItemAliases.Register("mdma", MdmaProductIds.Tablets);
         ConsoleItemAliases.Register("mdmacrystals", MdmaProductIds.Crystals);
@@ -429,7 +442,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 .WithGeneratedIconFromLooseVisual(
                     size: 512,
                     fitToCamera: true,
-                    cameraFill: 0.72f)
+                    cameraFill: 0.92f)
                 .WithGeneratedIconTransform(
                     new ProductPresentationTransform(
                         Vector3.zero,

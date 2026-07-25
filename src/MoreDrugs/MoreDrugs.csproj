@@ -58,6 +58,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\Icons\manual_tablet_press.png"
+                      LogicalName="MoreDrugs.Assets.Icons.manual_tablet_press.png" />
     <EmbeddedResource Include="Assets\Models\heartpill.glb"
                       LogicalName="MoreDrugs.Assets.Models.heartpill.glb" />
     <EmbeddedResource Include="Assets\Models\manual_tablet_press.glb"
