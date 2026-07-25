@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -245,6 +246,33 @@ def extruded_profile(
 
     mesh = bpy.data.meshes.new(f"{name}_Mesh")
     mesh.from_pydata(vertices, [], faces)
+
+    # Blender's render-time tessellation can bridge the concave throat of the
+    # C-frame with a stray cap triangle. Triangulate only the two profile caps
+    # explicitly, then recalculate the closed solid's winding before beveling.
+    editable_mesh = bmesh.new()
+    editable_mesh.from_mesh(mesh)
+    profile_caps = [
+        face for face in editable_mesh.faces if len(face.verts) == count
+    ]
+    if len(profile_caps) != 2:
+        editable_mesh.free()
+        raise RuntimeError(
+            f"{name} expected two profile caps, found {len(profile_caps)}."
+        )
+    bmesh.ops.triangulate(
+        editable_mesh,
+        faces=profile_caps,
+        quad_method="BEAUTY",
+        ngon_method="BEAUTY",
+    )
+    bmesh.ops.recalc_face_normals(
+        editable_mesh,
+        faces=list(editable_mesh.faces),
+    )
+    editable_mesh.to_mesh(mesh)
+    editable_mesh.free()
+
     mesh.validate(verbose=False)
     mesh.update()
     obj = bpy.data.objects.new(name, mesh)

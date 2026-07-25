@@ -4,6 +4,10 @@ Run with:
     blender --background --factory-startup --python-exit-code 1 \
         --python tools/blender/render_mdma_press_crystal_showcase.py
 
+The default iteration pass renders only the critical stills at 640x360.
+Set MOREDRUGS_RENDER_QUALITY=final and MOREDRUGS_RENDER_ANIMATION=1 for the
+full 1280x720 animation frame sequence.
+
 This scene is a presentation reference. Unity remains authoritative for
 inventory changes, press interaction, and the final physics-assisted landing.
 """
@@ -11,6 +15,7 @@ inventory changes, press interaction, and the final physics-assisted landing.
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 import sys
 
@@ -40,6 +45,8 @@ from render_mdma_press_material_flow import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+RENDER_QUALITY = os.environ.get("MOREDRUGS_RENDER_QUALITY", "preview").lower()
+RENDER_ANIMATION = os.environ.get("MOREDRUGS_RENDER_ANIMATION", "0") == "1"
 OUTPUT_DIR = (
     REPO_ROOT
     / "artifacts"
@@ -109,9 +116,11 @@ def set_constant_visibility(
 ) -> None:
     animated_objects = [asset.container, *asset.objects]
     for obj in animated_objects:
+        enabled_for_asset = not obj.hide_render
         for frame, visible in states:
-            obj.hide_render = not visible
-            obj.hide_viewport = not visible
+            effective_visibility = visible and enabled_for_asset
+            obj.hide_render = not effective_visibility
+            obj.hide_viewport = not effective_visibility
             obj.keyframe_insert(data_path="hide_render", frame=frame)
             obj.keyframe_insert(data_path="hide_viewport", frame=frame)
 
@@ -301,7 +310,7 @@ def configure_scene() -> None:
     scene.render.engine = "BLENDER_EEVEE"
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
-    scene.render.resolution_percentage = 100
+    scene.render.resolution_percentage = 100 if RENDER_QUALITY == "final" else 50
     scene.render.image_settings.file_format = "PNG"
     scene.render.film_transparent = False
     scene.world.color = (0.008, 0.010, 0.014)
@@ -353,11 +362,11 @@ def main() -> None:
     )
     shoe_crystals, shoe_meshes = prepare_crystal_asset(
         "Showcase_ShoeGranules",
-        {"CrystalGranules"},
+        {"CrystalPile", "CrystalGranules"},
     )
     die_crystals, die_meshes = prepare_crystal_asset(
         "Showcase_DieGranules",
-        {"CrystalGranules"},
+        {"CrystalPile", "CrystalGranules"},
     )
     compressed_heart = import_asset(
         HEART_PATH,
@@ -384,10 +393,19 @@ def main() -> None:
         raise RuntimeError("Crystal showcase imports lost a required variant.")
 
     outlet_crystals.container.scale = (0.40, 0.40, 0.48)
-    shoe_crystals.container.scale = (0.82, 0.82, 0.82)
-    die_crystals.container.scale = (0.72, 0.72, 0.72)
+    shoe_crystals.container.scale = (0.72, 0.72, 0.72)
+    die_crystals.container.scale = (0.62, 0.62, 0.62)
     compressed_heart.container.scale = (0.06, 0.06, 0.06)
     moving_heart.container.scale = (0.06, 0.06, 0.06)
+
+    transfer_material = make_material(
+        "Showcase_TransferredCrystals",
+        (0.72, 0.16, 0.48, 1.0),
+        0.24,
+    )
+    for mesh in outlet_meshes + shoe_meshes + die_meshes:
+        mesh.data.materials.clear()
+        mesh.data.materials.append(transfer_material)
 
     add_floor()
     create_lighting()
@@ -412,18 +430,21 @@ def main() -> None:
     move_asset_to_anchor(
         outlet_crystals,
         outlet_meshes,
-        press.named("FeedPowder"),
-        z_offset=0.010,
+        press.named("FeedPocketRim"),
+        z_offset=0.025,
     )
 
     shoe_start = round(showcase_frame(6))
     shoe_end = round(showcase_frame(17))
     scene.frame_set(ACTION_START)
-    move_asset_to_anchor(
+    feed_pocket = press.named("FeedPocketRim")
+    feed_center = bounds_center(feed_pocket)
+    _, feed_maximum = mesh_bounds([feed_pocket])
+    place_asset_on(
         shoe_crystals,
         shoe_meshes,
-        press.named("FeedPowder"),
-        z_offset=-0.001,
+        (feed_center.x, feed_center.y),
+        feed_maximum.z + 0.002,
     )
     parent_keep_world(
         shoe_crystals.container,
@@ -433,11 +454,14 @@ def main() -> None:
     die_start = round(showcase_frame(17))
     die_end = round(showcase_frame(34))
     scene.frame_set(die_start)
-    move_asset_to_anchor(
+    die_insert = press.named("HeartDieInsert")
+    die_center = bounds_center(die_insert)
+    _, die_maximum = mesh_bounds([die_insert])
+    place_asset_on(
         die_crystals,
         die_meshes,
-        press.named("DiePowderFill"),
-        z_offset=-0.001,
+        (die_center.x, die_center.y),
+        die_maximum.z + 0.002,
     )
 
     compressed_start = round(showcase_frame(35))
@@ -502,10 +526,17 @@ def main() -> None:
 
     bpy.ops.wm.save_as_mainfile(filepath=str(SHOWCASE_BLEND_PATH))
     render_critical_frames()
-    render_animation_frames()
+    if RENDER_ANIMATION:
+        render_animation_frames()
     print(f"Showcase blend: {SHOWCASE_BLEND_PATH}")
-    print(f"Showcase frames: {ANIMATION_FRAMES_DIR}")
-    print(f"Encode target: {SHOWCASE_VIDEO_PATH}")
+    print(
+        f"Render preset: {RENDER_QUALITY} "
+        f"({bpy.context.scene.render.resolution_percentage}%), "
+        f"animation={'yes' if RENDER_ANIMATION else 'no'}"
+    )
+    if RENDER_ANIMATION:
+        print(f"Showcase frames: {ANIMATION_FRAMES_DIR}")
+        print(f"Encode target: {SHOWCASE_VIDEO_PATH}")
     print(f"Critical frames: {CRITICAL_FRAMES}")
 
 
