@@ -490,6 +490,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     {
         S1StationFramework.StationItem station =
             UnityEngine.Object.Instantiate(template);
+        S1StationFramework.CookableModule? cookable =
+            station.GetModule<S1StationFramework.CookableModule>();
+        if (cookable != null)
+            station.Modules.Remove(cookable);
+
         PrepareCrystalPrefab(
             station.gameObject,
             "MoreDrugs_MDMA_Crystals_Station");
