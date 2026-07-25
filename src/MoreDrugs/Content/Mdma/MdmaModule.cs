@@ -176,7 +176,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         }
 
         _definition.Discover(listForSale: true);
-        _crystalDefinition.Discover(listForSale: false);
+        EnsureCrystalsRemainIntermediate();
         TryGenerateTabletPressIcon();
 
         if (!_tabletPressAddedToShop)
@@ -430,6 +430,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     size: 512,
                     fitToCamera: true,
                     cameraFill: 0.72f)
+                .WithGeneratedIconTransform(
+                    new ProductPresentationTransform(
+                        Vector3.zero,
+                        new Vector3(45f, 0f, 0f),
+                        Vector3.one))
                 .Require(
                     ProductPresentationContext.Loose,
                     ProductPresentationContext.Stored,
@@ -526,6 +531,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             }
 
             _tabletPressDefinition.Icon = icon;
+            ShopManager.RefreshItemIcon(_tabletPressDefinition);
             _tabletPressIconGenerated = true;
         }
         catch (Exception exception)
@@ -537,6 +543,28 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         {
             if (iconSource != null)
                 UnityEngine.Object.Destroy(iconSource);
+        }
+    }
+
+    private void EnsureCrystalsRemainIntermediate()
+    {
+        S1Product.ProductDefinition? nativeDefinition =
+            GetNativeProductDefinition(MdmaProductIds.Crystals);
+        if (nativeDefinition == null)
+        {
+            _logger.Warning(
+                "MDMA crystals could not be removed from product discovery because their native definition is unavailable.");
+            return;
+        }
+
+        bool removedFromListings =
+            S1Product.ProductManager.ListedProducts.Remove(nativeDefinition);
+        bool removedFromDiscovery =
+            S1Product.ProductManager.DiscoveredProducts.Remove(nativeDefinition);
+        if (removedFromListings || removedFromDiscovery)
+        {
+            _logger.Msg(
+                "Migrated MDMA crystals to an unfinished production intermediate; they are no longer listed or shown in Product Manager.");
         }
     }
 
