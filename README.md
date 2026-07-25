@@ -12,11 +12,23 @@ drug type.
 ## MDMA v1
 
 - A custom logical MDMA product kind and fixed product definition.
-- The mod-owned `Abstract Heart` GLB for loose, held, stored, station, functional,
-  consumption, and generated inventory-icon presentation.
+- The attributed `Abstract Heart` GLB for the pressed tablet's loose, held,
+  stored, station, functional, consumption, and generated inventory-icon
+  presentation.
 - Native baggie and jar shells populated with custom pill meshes; no extracted
   game packaging assets are redistributed.
-- A Chemistry Station recipe using native station-capable ingredients.
+- A Chemistry Station batch recipe that produces 20 MDMA crystals. Crystals
+  are unfinished quality items rather than products: they cannot be packaged,
+  consumed, sold to customers, or listed in Product Manager. Their custom
+  four-variant GLB remains available for held, stored, station, icon, and press
+  presentation.
+- An original, floor-standing manual tablet-press GLB with a validated
+  player-height pedestal, native Brick Press-style handle/ram anchors, and a
+  reference press-cycle animation. It is sold at Handy Hank's Hardware and
+  Dan's Hardware. Each full wheel cycle converts one compatible crystal into
+  one heart tablet.
+  See
+  [the integration contract](docs/manual-tablet-press-integration.md).
 - Save-provider reconstruction, Product Manager metadata, discovery, and listing.
 - Mono and IL2CPP build targets.
 
@@ -41,6 +53,22 @@ Install the matching MoreDrugs DLL in the game `Mods` directory. Install the
 matching S1API and S1MAPI builds as dependencies. All multiplayer peers need the
 same mod and assets.
 
+For a quick manual test, the S1API console aliases are:
+
+```text
+give tabletpress
+give mdmacrystals 20
+give mdma
+```
+
+Place the press on a floor grid, insert one or more compatible MDMA crystals,
+begin the native-style task, and rotate the wheel clockwise through three full
+turns. Each cycle consumes one crystal and produces one tablet, so processing
+the chemistry station's 20-crystal batch takes 20 separate press cycles. The
+tray animation is local presentation derived from the replicated quantity;
+save/load and late join rebuild a deterministic settled tray rather than
+serializing cosmetic rigidbodies.
+
 ## Adding another drug
 
 Implement `IDrugContentModule` in a new content folder and add it to the catalog
@@ -56,5 +84,5 @@ must not be committed.
 
 ## Licenses
 
-MoreDrugs source code is GPL-3.0-or-later. The bundled model is separately licensed
-under CC BY 4.0; see [ASSET-LICENSE.md](ASSET-LICENSE.md).
+MoreDrugs source code is GPL-3.0-or-later. Bundled assets use the per-asset
+licenses in [ASSET-LICENSE.md](ASSET-LICENSE.md); `heartpill.glb` is CC BY 4.0.

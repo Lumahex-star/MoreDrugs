@@ -6,7 +6,7 @@ namespace MoreDrugs.Content;
 internal sealed class DrugCatalog : ICustomProductSaveProvider, IDisposable
 {
     internal const string SaveProviderId = "ifbars.moredrugs:products";
-    internal const int SaveProviderVersion = 1;
+    internal const int SaveProviderVersion = 2;
 
     private readonly MelonLogger.Instance _logger;
     private readonly IReadOnlyList<IDrugContentModule> _modules;
@@ -61,7 +61,7 @@ internal sealed class DrugCatalog : ICustomProductSaveProvider, IDisposable
 
     public CustomProductDefinitionBuilder? Restore(CustomProductSaveDescriptor descriptor)
     {
-        if (descriptor.ProviderVersion != SaveProviderVersion)
+        if (descriptor.ProviderVersion is < 1 or > SaveProviderVersion)
             return null;
 
         return _modulesByProviderData.TryGetValue(
@@ -77,4 +77,3 @@ internal sealed class DrugCatalog : ICustomProductSaveProvider, IDisposable
             module.Dispose();
     }
 }
-
