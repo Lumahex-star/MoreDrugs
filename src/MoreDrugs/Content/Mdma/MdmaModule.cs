@@ -622,7 +622,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             visual.transform.localScale = Vector3.one * 1.15f;
             visual.SetActive(true);
 
-            Sprite? icon = IconFactory.GenerateIconSprite(
+            Sprite? icon = GenerateDurableIcon(
                 iconRoot.transform,
                 size: 512,
                 bakeSkinnedMeshes: true,
@@ -669,7 +669,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 }
             }
 
-            Sprite? icon = IconFactory.GenerateIconSprite(
+            Sprite? icon = GenerateDurableIcon(
                 rig.Root.transform,
                 size: 512,
                 bakeSkinnedMeshes: true,
@@ -695,6 +695,44 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         {
             if (iconSource != null)
                 UnityEngine.Object.Destroy(iconSource);
+        }
+    }
+
+    private static Sprite? GenerateDurableIcon(
+        Transform source,
+        int size,
+        bool bakeSkinnedMeshes,
+        bool fitToCamera,
+        float cameraFill)
+    {
+        Texture2D? rendered = IconFactory.GenerateIcon(
+            source,
+            size,
+            bakeSkinnedMeshes,
+            fitToCamera,
+            cameraFill);
+        if (rendered == null)
+            return null;
+
+        try
+        {
+            byte[] encoded = rendered.EncodeToPNG();
+            if (encoded == null || encoded.Length == 0)
+                return null;
+
+            Sprite? icon = ImageUtils.LoadImageRaw(encoded);
+            if (icon == null)
+                return null;
+
+            icon.name = $"{source.name}_Icon";
+            icon.texture.name = $"{source.name}_IconTexture";
+            icon.texture.filterMode = FilterMode.Bilinear;
+            icon.texture.wrapMode = TextureWrapMode.Clamp;
+            return icon;
+        }
+        finally
+        {
+            UnityEngine.Object.Destroy(rendered);
         }
     }
 
