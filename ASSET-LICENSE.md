@@ -11,3 +11,14 @@
 The model is licensed separately from the MoreDrugs source code. Attribution does
 not imply that Desertsage Digital Art endorses MoreDrugs, Schedule I, or its authors.
 
+## Manual Tablet Press
+
+- Creator: MoreDrugs contributors
+- Bundled file: `src/MoreDrugs/Assets/Models/manual_tablet_press.glb`
+- Blender source: `assets/source/manual_tablet_press.blend`
+- Generator: `tools/blender/create_manual_tablet_press.py`
+- License: GPL-3.0-or-later, matching the MoreDrugs source code
+
+This is an original low-poly design created from primitives for MoreDrugs. The
+marketplace images used as general arbor-press reference material remain local and
+are not included in the repository or distributed with the mod.

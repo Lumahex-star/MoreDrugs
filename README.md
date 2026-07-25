@@ -12,11 +12,20 @@ drug type.
 ## MDMA v1
 
 - A custom logical MDMA product kind and fixed product definition.
-- The mod-owned `Abstract Heart` GLB for loose, held, stored, station, functional,
-  consumption, and generated inventory-icon presentation.
+- The attributed `Abstract Heart` GLB for the pressed tablet's loose, held,
+  stored, station, functional, consumption, and generated inventory-icon
+  presentation.
 - Native baggie and jar shells populated with custom pill meshes; no extracted
   game packaging assets are redistributed.
-- A Chemistry Station recipe using native station-capable ingredients.
+- A Chemistry Station batch recipe that produces 20 MDMA crystals. Crystals
+  temporarily reuse the native cocaine presentation while MoreDrugs keeps their
+  logical identity and batch data fully custom.
+- An original, floor-standing manual tablet-press GLB with a validated
+  player-height pedestal, native Brick Press-style handle/ram anchors, and a
+  reference press-cycle animation. It is sold at Handy Hank's Hardware and
+  Dan's Hardware and converts 20 compatible crystals into 20 heart tablets.
+  See
+  [the integration contract](docs/manual-tablet-press-integration.md).
 - Save-provider reconstruction, Product Manager metadata, discovery, and listing.
 - Mono and IL2CPP build targets.
 
@@ -40,6 +49,21 @@ dotnet build .\src\MoreDrugs\MoreDrugs.csproj -c Il2cpp
 Install the matching MoreDrugs DLL in the game `Mods` directory. Install the
 matching S1API and S1MAPI builds as dependencies. All multiplayer peers need the
 same mod and assets.
+
+For a quick manual test, the S1API console aliases are:
+
+```text
+give tabletpress
+give mdmacrystals 20
+give mdma
+```
+
+Place the press on a floor grid, insert 20 compatible MDMA crystals, begin the
+native-style task, pour all 20 functional crystal visuals into the die, and drag
+the handle through one full turn. The authoritative output slot should contain
+20 MDMA tablets. The tray animation is local presentation derived from that
+replicated quantity; save/load and late join rebuild a deterministic settled
+tray rather than serializing cosmetic rigidbodies.
 
 ## Adding another drug
 

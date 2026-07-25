@@ -8,10 +8,15 @@ using S1Product = ScheduleOne.Product;
 #endif
 
 using MelonLoader;
+using MoreDrugs.Content.Mdma.Production;
 using MoreDrugs.Infrastructure;
+using S1API.Console;
 using S1API.Items;
+using S1API.Items.Buildable;
 using S1API.Products;
 using S1API.Properties;
+using S1API.Rendering;
+using S1API.Shops;
 using S1API.Stations;
 using UnityEngine;
 
@@ -20,9 +25,11 @@ namespace MoreDrugs.Content.Mdma;
 internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 {
     internal const string ProductKindId = "ifbars.moredrugs:mdma";
-    internal const string ProductId = "ifbars.moredrugs:products/mdma";
+    internal const string ProductId = MdmaProductIds.Tablets;
     internal const string RecipeId = "ifbars.moredrugs:mdma-synthesis";
     internal const string ProviderData = "mdma";
+    internal const string TabletPressItemId =
+        "ifbars.moredrugs:stations/manual-tablet-press";
 
     private const string HeartPillResource =
         "MoreDrugs.Assets.Models.heartpill.glb";
@@ -30,16 +37,21 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private readonly MelonLogger.Instance _logger;
     private readonly EmbeddedGlbAsset _heartPill =
         new EmbeddedGlbAsset(HeartPillResource, "MoreDrugs_HeartPill");
+    private readonly ManualTabletPressAsset _tabletPressAsset = new();
 
     private ProductKind? _productKind;
     private ProductPresentationProfile? _presentationProfile;
     private ProductPackagingContentProfile? _baggieProfile;
     private ProductPackagingContentProfile? _jarProfile;
     private CustomProductDefinition? _definition;
+    private CustomProductDefinition? _crystalDefinition;
+    private S1API.Items.Buildable.BuildableItemDefinition? _tabletPressDefinition;
     private ChemistryStationRecipe? _recipe;
     private ProductKindMetadata? _metadata;
     private ProductMixingProfile? _mixingProfile;
     private GameObject? _consumptionSource;
+    private bool _tabletPressAddedToShop;
+    private bool _tabletPressIconGenerated;
 
     internal MdmaModule(MelonLogger.Instance logger)
     {
@@ -50,14 +62,15 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 
     public void RegisterContent()
     {
-        if (_definition != null)
+        if (_definition != null &&
+            _crystalDefinition != null &&
+            _tabletPressDefinition != null)
             return;
 
         ProductDefinition template =
-            ItemManager.GetDefinition("ogkush") as ProductDefinition ??
-            ItemManager.GetDefinition("weed") as ProductDefinition ??
+            ItemManager.GetDefinition("cocaine") as ProductDefinition ??
             throw new InvalidOperationException(
-                "Neither 'ogkush' nor 'weed' is available as a native product scaffold.");
+                "The native 'cocaine' product scaffold is unavailable.");
         PackagingDefinition baggie =
             ItemManager.GetDefinition("baggie") as PackagingDefinition ??
             throw new InvalidOperationException(
@@ -80,10 +93,32 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         RegisterMixing(_productKind);
 
         _definition = CreateBuilder(template, baggie, jar).Build();
+        _crystalDefinition = CreateCrystalBuilder(template, baggie, jar).Build();
+        _tabletPressDefinition =
+            S1API.Items.Buildable.BuildableItemCreator.CloneFrom("brickpress")
+                .WithBasicInfo(
+                    TabletPressItemId,
+                    "Manual Tablet Press",
+                    "A hand-operated press for converting MDMA crystals into tablets.",
+                    ItemCategory.Equipment)
+                .WithBuildSound(S1API.Items.Buildable.BuildSoundType.Metal)
+                .WithPricing(2_500f, 0.5f)
+                .Build();
+
+        ConsoleItemAliases.Register("mdma", MdmaProductIds.Tablets);
+        ConsoleItemAliases.Register("mdmacrystals", MdmaProductIds.Crystals);
+        ConsoleItemAliases.Register("tabletpress", TabletPressItemId);
+        ManualTabletPressRuntime.Configure(
+            _tabletPressAsset,
+            () => _heartPill.GetOrLoad(),
+            _logger);
+
         _recipe ??=
             ChemistryStationRecipes.CreateAndRegister(builder => builder
                 .WithRecipeId(RecipeId)
-                .WithTitle("Synthesize MDMA")
+                // StationRecipeEntry appends "(20x)" without a separator. The word
+                // joiner preserves the preceding display space through S1API's trim.
+                .WithTitle("MDMA Crystals \u2060")
                 .WithCookTimeMinutes(240)
                 .WithTemperature(220f, 20f)
                 .WithFinalLiquidColor(new Color(0.95f, 0.3f, 0.65f))
@@ -92,15 +127,20 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     2)
                 .WithIngredient("acid", 1)
                 .WithIngredient("phosphorus", 1)
-                .WithProduct(ProductId, 5));
+                .WithProduct(MdmaProductIds.Crystals, ManualTabletPressRuntime.BatchSize));
 
         _logger.Msg(
-            $"Registered MDMA product '{ProductId}' and chemistry recipe '{RecipeId}'.");
+            $"Registered MDMA products '{MdmaProductIds.Crystals}' and " +
+            $"'{MdmaProductIds.Tablets}', tablet press '{TabletPressItemId}', " +
+            $"and chemistry recipe '{RecipeId}'.");
     }
 
     public void CompleteLoad()
     {
-        if (_definition == null || _productKind == null)
+        if (_definition == null ||
+            _crystalDefinition == null ||
+            _tabletPressDefinition == null ||
+            _productKind == null)
             return;
 
         if (_metadata == null)
@@ -125,24 +165,45 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         }
 
         _definition.Discover(listForSale: true);
+        _crystalDefinition.Discover(listForSale: false);
+        TryGenerateTabletPressIcon();
+
+        if (!_tabletPressAddedToShop)
+        {
+            int shopCount = ShopManager.AddToShops(
+                _tabletPressDefinition,
+                2_500f,
+                "Handy Hank's Hardware",
+                "Dan's Hardware");
+            _tabletPressAddedToShop = shopCount > 0;
+            if (!_tabletPressAddedToShop)
+            {
+                _logger.Warning(
+                    "The Manual Tablet Press could not be added to a hardware store yet; registration will retry after the next load.");
+            }
+        }
     }
 
     public CustomProductDefinitionBuilder? Restore(
         CustomProductSaveDescriptor descriptor)
     {
-        if (!string.Equals(
-                descriptor.ProductId,
-                ProductId,
-                StringComparison.OrdinalIgnoreCase))
+        bool isTablets = string.Equals(
+            descriptor.ProductId,
+            MdmaProductIds.Tablets,
+            StringComparison.OrdinalIgnoreCase);
+        bool isCrystals = string.Equals(
+            descriptor.ProductId,
+            MdmaProductIds.Crystals,
+            StringComparison.OrdinalIgnoreCase);
+        if (!isTablets && !isCrystals)
         {
             return null;
         }
 
         ProductDefinition template =
-            ItemManager.GetDefinition("ogkush") as ProductDefinition ??
-            ItemManager.GetDefinition("weed") as ProductDefinition ??
+            ItemManager.GetDefinition("cocaine") as ProductDefinition ??
             throw new InvalidOperationException(
-                "Cannot restore MDMA without the native product scaffold.");
+                "Cannot restore MDMA without the native cocaine product scaffold.");
         PackagingDefinition baggie =
             ItemManager.GetDefinition("baggie") as PackagingDefinition ??
             throw new InvalidOperationException(
@@ -160,7 +221,9 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         GameObject pillSource = _heartPill.GetOrLoad();
         EnsurePresentationRegistered(template, pillSource);
         EnsurePackagingRegistered(pillSource);
-        return CreateBuilder(template, baggie, jar);
+        return isTablets
+            ? CreateBuilder(template, baggie, jar)
+            : CreateCrystalBuilder(template, baggie, jar);
     }
 
     public void Dispose()
@@ -169,6 +232,8 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             UnityEngine.Object.Destroy(_consumptionSource);
 
         _consumptionSource = null;
+        ManualTabletPressRuntime.Reset();
+        _tabletPressAsset.Dispose();
         _heartPill.Dispose();
     }
 
@@ -215,13 +280,38 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 ProviderData);
     }
 
-    private void EnsurePresentationRegistered(
+    private CustomProductDefinitionBuilder CreateCrystalBuilder(
         ProductDefinition template,
-        GameObject pillSource)
+        PackagingDefinition baggie,
+        PackagingDefinition jar)
     {
         ProductKind kind = _productKind ??
             throw new InvalidOperationException("MDMA product kind is not registered.");
 
+        return CustomProductItemCreator
+            .CreateBuilder(MdmaProductIds.Crystals, kind)
+            .WithName("MDMA Crystals")
+            .WithDescription(
+                "An unpressed MDMA batch ready for the Manual Tablet Press.")
+            .WithProductPrice(140f)
+            .WithProperties(Property.Energizing, Property.Focused)
+            .WithLegalStatus(LegalStatus.Illegal)
+            .WithBaseAddictiveness(0.35f)
+            .WithDefaultQuality(Quality.Premium)
+            .WithRepresentationsFrom(template)
+            .WithValidPackaging(baggie, jar)
+            .WithEffectDurations(playerSeconds: 180, npcSeconds: 240)
+            .WithNativeMixerMap(ProductMixingMap.Cocaine)
+            .WithSaveProvider(
+                DrugCatalog.SaveProviderId,
+                DrugCatalog.SaveProviderVersion,
+                ProviderData);
+    }
+
+    private void EnsurePresentationRegistered(
+        ProductDefinition template,
+        GameObject pillSource)
+    {
         ProductPresentationTransform pillPose =
             new ProductPresentationTransform(
                 Vector3.zero,
@@ -230,11 +320,20 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     Quaternion.Euler(0f, 90f, 0f)
                 ).eulerAngles,
                 Vector3.one * 0.06f);
+        ProductPresentationTransform heldPillPose =
+            new ProductPresentationTransform(
+                pillPose.LocalPosition,
+                (
+                    Quaternion.Euler(-90f, 0f, 0f) *
+                    Quaternion.Euler(0f, -90f, 0f)
+                ).eulerAngles,
+                pillPose.LocalScale);
 
         _consumptionSource ??= CreateConsumptionSource(pillSource, pillPose);
         _presentationProfile ??=
             new ProductPresentationProfileBuilder()
                 .WithLooseVisual(() => pillSource, pillPose)
+                .WithHeldVisual(() => pillSource, heldPillPose)
                 .WithGeneratedIconFromLooseVisual(
                     size: 512,
                     fitToCamera: true,
@@ -250,9 +349,9 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     ProductPresentationContext.Consumption)
                 .Build();
 
-        ProductPresentationProfileRegistry.RegisterForProductKind(
+        ProductPresentationProfileRegistry.RegisterForProduct(
             ModInfo.OwnerId,
-            kind,
+            MdmaProductIds.Tablets,
             _presentationProfile);
     }
 
@@ -293,16 +392,6 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ProductId,
             "jar",
             _jarProfile);
-        ProductPackagingContentProfileRegistry.RegisterForProductKind(
-            ModInfo.OwnerId,
-            ProductKindId,
-            "baggie",
-            _baggieProfile);
-        ProductPackagingContentProfileRegistry.RegisterForProductKind(
-            ModInfo.OwnerId,
-            ProductKindId,
-            "jar",
-            _jarProfile);
     }
 
     private static ProductPresentationTransform JarPlacement(
@@ -316,15 +405,65 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             Vector3.one * 0.04f);
     }
 
+    private void TryGenerateTabletPressIcon()
+    {
+        if (_tabletPressIconGenerated || _tabletPressDefinition == null)
+            return;
+
+        GameObject? iconSource = null;
+        try
+        {
+            iconSource = new GameObject("MoreDrugs_TabletPressIconSource");
+            ManualTabletPressRig rig =
+                _tabletPressAsset.CreateInstance(iconSource.transform);
+            rig.FreshTabletAssembly.gameObject.SetActive(false);
+            foreach (Transform child in
+                     rig.Root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name.StartsWith(
+                        "FinishedTablet_",
+                        StringComparison.Ordinal))
+                {
+                    child.gameObject.SetActive(false);
+                }
+            }
+
+            Sprite? icon = IconFactory.GenerateIconSprite(
+                rig.Root.transform,
+                size: 512,
+                bakeSkinnedMeshes: true,
+                fitToCamera: true,
+                cameraFill: 0.72f);
+            if (icon == null)
+            {
+                _logger.Warning(
+                    "Manual Tablet Press icon generation is not ready; the inherited Brick Press icon will be used until the next load.");
+                return;
+            }
+
+            _tabletPressDefinition.Icon = icon;
+            _tabletPressIconGenerated = true;
+        }
+        catch (Exception exception)
+        {
+            _logger.Warning(
+                $"Manual Tablet Press icon generation failed; the inherited Brick Press icon will be used: {exception.Message}");
+        }
+        finally
+        {
+            if (iconSource != null)
+                UnityEngine.Object.Destroy(iconSource);
+        }
+    }
+
     private static GameObject CreateConsumptionSource(
         GameObject pillSource,
         ProductPresentationTransform pillPose)
     {
         S1Product.ProductDefinition nativeTemplate =
-            GetNativeProductDefinition("ogkush") ??
-            GetNativeProductDefinition("weed") ??
+            GetNativeProductDefinition("cocaine") ??
             throw new InvalidOperationException(
-                "Cannot create the MDMA consumption prefab without a native product scaffold.");
+                "Cannot create the MDMA consumption prefab without the native cocaine scaffold.");
         GameObject consumptionSource =
             UnityEngine.Object.Instantiate(
                 nativeTemplate.ConsumeAnimation.gameObject);
