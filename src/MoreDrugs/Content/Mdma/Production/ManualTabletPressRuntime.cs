@@ -1125,7 +1125,14 @@ internal sealed class ManualTabletPressInstance
         _press.MouldDetection.size = new Vector3(0.28f, 0.18f, 0.28f);
 
         if (_press.OutputVisuals != null)
+        {
+            // StorageVisualizer subscribes QueueRefresh directly to the output
+            // slot. Disabling the component does not stop that delegate, so the
+            // native Brick Press would still create a second pill beside the
+            // custom collection tray whenever the output quantity changed.
+            _press.OutputVisuals.BlockRefreshes = true;
             _press.OutputVisuals.enabled = false;
+        }
     }
 
     private void ApplyMechanics(float progress)
