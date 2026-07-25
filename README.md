@@ -84,5 +84,5 @@ must not be committed.
 
 ## Licenses
 
-MoreDrugs source code is GPL-3.0-or-later. The bundled model is separately licensed
-under CC BY 4.0; see [ASSET-LICENSE.md](ASSET-LICENSE.md).
+MoreDrugs source code is GPL-3.0-or-later. Bundled assets use the per-asset
+licenses in [ASSET-LICENSE.md](ASSET-LICENSE.md); `heartpill.glb` is CC BY 4.0.

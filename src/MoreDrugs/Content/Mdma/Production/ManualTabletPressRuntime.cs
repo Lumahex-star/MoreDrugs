@@ -44,8 +44,8 @@ namespace MoreDrugs.Content.Mdma.Production;
 /// </summary>
 internal static class ManualTabletPressRuntime
 {
-    private static readonly ConditionalWeakTable<
-        S1ObjectScripts.BrickPress,
+    private static readonly Dictionary<
+        int,
         ManualTabletPressInstance> Instances = new();
 
     private static readonly ConditionalWeakTable<
@@ -60,8 +60,8 @@ internal static class ManualTabletPressRuntime
         S1PlayerTasks.UseBrickPress,
         S1ObjectScripts.BrickPress> ActiveTabletPressTasks = new();
 
-    private static readonly ConditionalWeakTable<
-        S1ObjectScripts.BrickPress,
+    private static readonly Dictionary<
+        int,
         ManualTabletPressCompletionGate> CompletionGates = new();
 
     private static readonly MethodInfo? BeginNativePressMethod =
@@ -112,6 +112,11 @@ internal static class ManualTabletPressRuntime
 
     internal static void Reset()
     {
+        foreach (ManualTabletPressInstance instance in Instances.Values)
+            instance.Dispose();
+
+        Instances.Clear();
+        CompletionGates.Clear();
         _pressAsset = null;
         _pillSourceFactory = null;
         _crystalSourceFactory = null;
@@ -135,7 +140,8 @@ internal static class ManualTabletPressRuntime
 
     internal static void Attach(S1ObjectScripts.BrickPress press)
     {
-        if (!IsTabletPress(press) || Instances.TryGetValue(press, out _))
+        int pressKey = press.GetInstanceID();
+        if (!IsTabletPress(press) || Instances.ContainsKey(pressKey))
             return;
 
         if (_pressAsset == null ||
@@ -151,7 +157,7 @@ internal static class ManualTabletPressRuntime
         try
         {
             Instances.Add(
-                press,
+                pressKey,
                 new ManualTabletPressInstance(
                     press,
                     _pressAsset,
@@ -191,8 +197,30 @@ internal static class ManualTabletPressRuntime
 
     internal static void Tick(S1ObjectScripts.BrickPress press)
     {
-        if (Instances.TryGetValue(press, out ManualTabletPressInstance? instance))
+        if (Instances.TryGetValue(
+                press.GetInstanceID(),
+                out ManualTabletPressInstance? instance))
             instance.Tick();
+    }
+
+    internal static void Detach(S1ObjectScripts.BrickPress press)
+    {
+        if (press == null)
+            return;
+
+        int pressKey = press.GetInstanceID();
+        if (Instances.TryGetValue(
+                pressKey,
+                out ManualTabletPressInstance? instance))
+        {
+            Instances.Remove(pressKey);
+            instance.Dispose();
+        }
+
+        CompletionGates.Remove(pressKey);
+        PreparedNativeLoads.Remove(press);
+        if (press.Handle != null)
+            CircularHandleInteractions.Remove(press.Handle);
     }
 
     internal static bool TryGetSufficientCrystals(
@@ -279,10 +307,14 @@ internal static class ManualTabletPressRuntime
         if (!IsTabletPress(press))
             return false;
 
-        ManualTabletPressCompletionGate gate =
-            CompletionGates.GetValue(
-                press,
-                static _ => new ManualTabletPressCompletionGate());
+        int pressKey = press.GetInstanceID();
+        if (!CompletionGates.TryGetValue(
+                pressKey,
+                out ManualTabletPressCompletionGate? gate))
+        {
+            gate = new ManualTabletPressCompletionGate();
+            CompletionGates.Add(pressKey, gate);
+        }
         if (!gate.TryCommit())
         {
             _logger?.Warning(
@@ -336,12 +368,10 @@ internal static class ManualTabletPressRuntime
     internal static void RefreshCanvas(S1UIStations.BrickPressCanvas canvas)
     {
         S1ObjectScripts.BrickPress? press = canvas.Press;
-        bool isTabletPress = IsTabletPress(press);
-        SetCanvasTitle(
-            canvas,
-            isTabletPress ? "Manual Tablet Press" : "Brick Press");
-        if (!isTabletPress || press == null)
+        if (!IsTabletPress(press) || press == null)
             return;
+
+        SetCanvasTitle(canvas, "Manual Tablet Press");
 
         switch (GetState(press))
         {
@@ -441,10 +471,16 @@ internal static class ManualTabletPressRuntime
 
     private static void ArmCompletion(S1ObjectScripts.BrickPress press)
     {
-        CompletionGates.GetValue(
-                press,
-                static _ => new ManualTabletPressCompletionGate())
-            .Arm();
+        int pressKey = press.GetInstanceID();
+        if (!CompletionGates.TryGetValue(
+                pressKey,
+                out ManualTabletPressCompletionGate? gate))
+        {
+            gate = new ManualTabletPressCompletionGate();
+            CompletionGates.Add(pressKey, gate);
+        }
+
+        gate.Arm();
     }
 
     private static S1Product.ProductItemInstance? CreateTaskProductSurrogate()
@@ -760,6 +796,16 @@ internal static class ManualTabletPressRuntime
             Tick(__instance);
     }
 
+    [HarmonyPatch(typeof(S1ObjectScripts.BrickPress), "Destroy")]
+    private static class DestroyPatch
+    {
+        private static void Prefix(S1ObjectScripts.BrickPress __instance)
+        {
+            if (IsTabletPress(__instance))
+                Detach(__instance);
+        }
+    }
+
     [HarmonyPatch(
         typeof(S1ItemFramework.ItemSlot),
         nameof(S1ItemFramework.ItemSlot.DoesItemMatchHardFilters))]
@@ -1003,6 +1049,8 @@ internal sealed class ManualTabletPressInstance
     private readonly List<GameObject> _tablets = new();
 
     private int _observedOutputQuantity = -1;
+    private object? _ejectionCoroutine;
+    private bool _disposed;
     private bool _ejectionRunning;
     private int _queuedEjections;
     private uint _sequence;
@@ -1081,6 +1129,9 @@ internal sealed class ManualTabletPressInstance
 
     internal void Tick()
     {
+        if (_disposed || _rig.Root == null)
+            return;
+
         float progress = Mathf.Clamp01(_press.Handle.CurrentPosition);
         ApplyMechanics(progress);
         ObserveOutput();
@@ -1102,7 +1153,7 @@ internal sealed class ManualTabletPressInstance
             _rig.Root.transform.up);
 
         _press.CameraPosition = _rig.CameraPressing;
-        _press.CameraPosition_Pouring = _rig.CameraPressing;
+        _press.CameraPosition_Pouring = _rig.CameraPouring;
         _press.CameraPosition_Raising = _rig.CameraPressing;
         _press.StandPoint = _rig.StandPoint;
         _press.ContainerSpawnPoint = _rig.ContainerSpawnPoint;
@@ -1221,32 +1272,47 @@ internal sealed class ManualTabletPressInstance
 
     private void QueueEjections(int count)
     {
+        if (_disposed)
+            return;
+
         _queuedEjections += Math.Min(count, MaximumVisibleTablets);
         if (_ejectionRunning)
             return;
 
         _ejectionRunning = true;
-        MelonCoroutines.Start(EjectQueuedTablets());
+        _ejectionCoroutine = MelonCoroutines.Start(EjectQueuedTablets());
     }
 
     private IEnumerator EjectQueuedTablets()
     {
-        while (_queuedEjections > 0)
+        try
         {
-            _queuedEjections--;
-            if (_tablets.Count >= MaximumVisibleTablets)
-                DestroyTabletAt(0);
+            while (!_disposed &&
+                   _rig.Root != null &&
+                   _queuedEjections > 0)
+            {
+                _queuedEjections--;
+                if (_tablets.Count >= MaximumVisibleTablets)
+                    DestroyTabletAt(0);
 
-            yield return AnimateOneTablet(_sequence++);
-            if (_queuedEjections > 0)
-                yield return new WaitForSeconds(EjectionIntervalSeconds);
+                yield return AnimateOneTablet(_sequence++);
+                if (_queuedEjections > 0)
+                    yield return new WaitForSeconds(EjectionIntervalSeconds);
+            }
         }
-
-        _ejectionRunning = false;
+        finally
+        {
+            _queuedEjections = 0;
+            _ejectionRunning = false;
+            _ejectionCoroutine = null;
+        }
     }
 
     private IEnumerator AnimateOneTablet(uint sequence)
     {
+        if (_disposed || _rig.Root == null)
+            yield break;
+
         GameObject tablet = CreateTabletVisual();
         _tablets.Add(tablet);
 
@@ -1274,7 +1340,10 @@ internal sealed class ManualTabletPressInstance
                 -8f);
 
         float elapsed = 0f;
-        while (elapsed < GuidedPathSeconds && tablet != null)
+        while (!_disposed &&
+               elapsed < GuidedPathSeconds &&
+               tablet != null &&
+               _rig.Root != null)
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / GuidedPathSeconds);
@@ -1327,6 +1396,25 @@ internal sealed class ManualTabletPressInstance
         foreach (Collider tabletCollider in AddTabletColliders(tablet))
             IgnoreNativePressColliders(tabletCollider);
         return tablet;
+    }
+
+    internal void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        _queuedEjections = 0;
+        if (_ejectionCoroutine != null)
+        {
+            MelonCoroutines.Stop(_ejectionCoroutine);
+            _ejectionCoroutine = null;
+        }
+
+        _ejectionRunning = false;
+        DestroyAllTablets();
+        if (_rig.Root != null)
+            UnityEngine.Object.Destroy(_rig.Root);
     }
 
     private GameObject CreateCrystalVisual(
@@ -1523,9 +1611,6 @@ internal sealed class ManualTabletPressInstance
                2f * inverse * t * control +
                t * t * end;
     }
-
-    private static float SafeDivide(float value, float divisor) =>
-        Mathf.Abs(divisor) < 0.0001f ? value : Mathf.Abs(value / divisor);
 
     private static void HideNativeRenderers(GameObject root)
     {

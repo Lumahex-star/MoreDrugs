@@ -1144,7 +1144,7 @@ def create_press() -> bpy.types.Object:
         [FRAME_IDLE, FRAME_FEED_RETRACTED],
         "rotation_euler",
     )
-    lever_assembly.rotation_euler = (0, math.radians(360), 0)
+    lever_assembly.rotation_euler = (0, 0, 0)
     keyframe_transform(
         lever_assembly,
         [FRAME_PRESS, FRAME_PRESS_HOLD],

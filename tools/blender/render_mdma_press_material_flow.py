@@ -156,10 +156,18 @@ def place_asset_on(
     bpy.context.view_layer.update()
 
 
-def set_asset_visible(asset: ImportedAsset, visible: bool) -> None:
+def set_asset_visible(
+    asset: ImportedAsset,
+    visible: bool,
+    visible_meshes: list[bpy.types.Object] | None = None,
+) -> None:
     asset.container.hide_render = not visible
+    allowed = None if visible_meshes is None else {obj.name for obj in visible_meshes}
     for obj in asset.objects:
-        obj.hide_render = not visible
+        if visible and allowed is not None and obj.type == "MESH":
+            obj.hide_render = obj.name not in allowed
+        else:
+            obj.hide_render = not visible
 
 
 def set_variant_visibility(
@@ -358,9 +366,9 @@ def main() -> None:
         bpy.context.scene.frame_set(stage.frame)
         bpy.context.view_layer.update()
 
-        set_asset_visible(hopper_crystals, stage.show_hopper)
-        set_asset_visible(shoe_crystals, stage.show_shoe)
-        set_asset_visible(die_crystals, stage.show_die)
+        set_asset_visible(hopper_crystals, stage.show_hopper, hopper_meshes)
+        set_asset_visible(shoe_crystals, stage.show_shoe, shoe_meshes)
+        set_asset_visible(die_crystals, stage.show_die, die_meshes)
         set_asset_visible(heart, stage.show_heart)
 
         if stage.show_shoe:

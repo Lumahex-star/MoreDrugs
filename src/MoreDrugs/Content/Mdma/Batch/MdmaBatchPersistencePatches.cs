@@ -75,7 +75,7 @@ internal static class MdmaBatchPersistencePatches
             S1Product.ProductItemInstance __instance,
             S1PersistenceData.ItemData __result)
         {
-            if (IsTablets(__instance.ID))
+            if (__result != null && IsTablets(__instance.ID))
             {
                 MdmaBatchRegistry.AssociateSaveData(
                     __result,
@@ -270,7 +270,7 @@ internal static class MdmaBatchPersistencePatches
             S1ItemFramework.QualityItemInstance __instance,
             S1PersistenceData.ItemData __result)
         {
-            if (IsCrystals(__instance.ID))
+            if (__result != null && IsCrystals(__instance.ID))
             {
                 MdmaBatchRegistry.AssociateSaveData(
                     __result,

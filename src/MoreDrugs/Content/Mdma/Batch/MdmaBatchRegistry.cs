@@ -81,7 +81,13 @@ internal static class MdmaBatchRegistry
         S1ItemFramework.QualityItemInstance source,
         S1ItemFramework.QualityItemInstance destination)
     {
-        if (!MdmaProductIds.TryGetForm(source.ID, out _))
+        if (!MdmaProductIds.TryGetForm(
+                source.ID,
+                out MdmaProductForm sourceForm) ||
+            !MdmaProductIds.TryGetForm(
+                destination.ID,
+                out MdmaProductForm destinationForm) ||
+            sourceForm != destinationForm)
             return;
 
         Attach(destination, GetOrCreate(source));
