@@ -376,6 +376,12 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ModInfo.OwnerId,
             MdmaProductIds.Tablets,
             _presentationProfile);
+        ProductPresentationProfileRegistry.RegisterForProductKind(
+            ModInfo.OwnerId,
+            _productKind ??
+                throw new InvalidOperationException(
+                    "MDMA product kind is not registered."),
+            _presentationProfile);
     }
 
     private void EnsurePackagingRegistered(GameObject pillSource)
@@ -413,6 +419,16 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         ProductPackagingContentProfileRegistry.Register(
             ModInfo.OwnerId,
             ProductId,
+            "jar",
+            _jarProfile);
+        ProductPackagingContentProfileRegistry.RegisterForProductKind(
+            ModInfo.OwnerId,
+            ProductKindId,
+            "baggie",
+            _baggieProfile);
+        ProductPackagingContentProfileRegistry.RegisterForProductKind(
+            ModInfo.OwnerId,
+            ProductKindId,
             "jar",
             _jarProfile);
     }
