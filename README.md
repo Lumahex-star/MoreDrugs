@@ -18,12 +18,15 @@ drug type.
 - Native baggie and jar shells populated with custom pill meshes; no extracted
   game packaging assets are redistributed.
 - A Chemistry Station batch recipe that produces 20 MDMA crystals. Crystals
-  temporarily reuse the native cocaine presentation while MoreDrugs keeps their
-  logical identity and batch data fully custom.
+  are unfinished quality items rather than products: they cannot be packaged,
+  consumed, sold to customers, or listed in Product Manager. Their custom
+  four-variant GLB remains available for held, stored, station, icon, and press
+  presentation.
 - An original, floor-standing manual tablet-press GLB with a validated
   player-height pedestal, native Brick Press-style handle/ram anchors, and a
   reference press-cycle animation. It is sold at Handy Hank's Hardware and
-  Dan's Hardware and converts 20 compatible crystals into 20 heart tablets.
+  Dan's Hardware. Each full wheel cycle converts one compatible crystal into
+  one heart tablet.
   See
   [the integration contract](docs/manual-tablet-press-integration.md).
 - Save-provider reconstruction, Product Manager metadata, discovery, and listing.
@@ -58,12 +61,13 @@ give mdmacrystals 20
 give mdma
 ```
 
-Place the press on a floor grid, insert 20 compatible MDMA crystals, begin the
-native-style task, pour all 20 functional crystal visuals into the die, and drag
-the handle through one full turn. The authoritative output slot should contain
-20 MDMA tablets. The tray animation is local presentation derived from that
-replicated quantity; save/load and late join rebuild a deterministic settled
-tray rather than serializing cosmetic rigidbodies.
+Place the press on a floor grid, insert one or more compatible MDMA crystals,
+begin the native-style task, and rotate the wheel clockwise through three full
+turns. Each cycle consumes one crystal and produces one tablet, so processing
+the chemistry station's 20-crystal batch takes 20 separate press cycles. The
+tray animation is local presentation derived from the replicated quantity;
+save/load and late join rebuild a deterministic settled tray rather than
+serializing cosmetic rigidbodies.
 
 ## Adding another drug
 

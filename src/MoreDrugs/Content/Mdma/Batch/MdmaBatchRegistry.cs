@@ -15,7 +15,7 @@ namespace MoreDrugs.Content.Mdma.Batch;
 internal static class MdmaBatchRegistry
 {
     private static readonly ConditionalWeakTable<
-        S1Product.ProductItemInstance,
+        S1ItemFramework.QualityItemInstance,
         MdmaBatchProfile> Profiles = new();
 
     private static readonly ConditionalWeakTable<
@@ -23,7 +23,7 @@ internal static class MdmaBatchRegistry
         MdmaBatchProfile> SaveProfiles = new();
 
     internal static bool TryGet(
-        S1Product.ProductItemInstance? instance,
+        S1ItemFramework.QualityItemInstance? instance,
         out MdmaBatchProfile? profile)
     {
         profile = null;
@@ -33,7 +33,7 @@ internal static class MdmaBatchRegistry
     }
 
     internal static MdmaBatchProfile GetOrCreate(
-        S1Product.ProductItemInstance instance)
+        S1ItemFramework.QualityItemInstance instance)
     {
         if (instance == null)
             throw new ArgumentNullException(nameof(instance));
@@ -53,7 +53,7 @@ internal static class MdmaBatchRegistry
     }
 
     internal static void Attach(
-        S1Product.ProductItemInstance instance,
+        S1ItemFramework.QualityItemInstance instance,
         MdmaBatchProfile profile)
     {
         if (instance == null)
@@ -78,8 +78,8 @@ internal static class MdmaBatchRegistry
     }
 
     internal static void Copy(
-        S1Product.ProductItemInstance source,
-        S1Product.ProductItemInstance destination)
+        S1ItemFramework.QualityItemInstance source,
+        S1ItemFramework.QualityItemInstance destination)
     {
         if (!MdmaProductIds.TryGetForm(source.ID, out _))
             return;
@@ -107,6 +107,16 @@ internal static class MdmaBatchRegistry
         return instance?.TryCast<S1Product.ProductItemInstance>();
 #else
         return instance as S1Product.ProductItemInstance;
+#endif
+    }
+
+    internal static S1ItemFramework.QualityItemInstance? AsQuality(
+        S1ItemFramework.ItemInstance? instance)
+    {
+#if IL2CPPMELON
+        return instance?.TryCast<S1ItemFramework.QualityItemInstance>();
+#else
+        return instance as S1ItemFramework.QualityItemInstance;
 #endif
     }
 }

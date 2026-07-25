@@ -2,8 +2,12 @@
 using S1 = Il2CppScheduleOne;
 using S1Building = Il2CppScheduleOne.Building;
 using S1EntityFramework = Il2CppScheduleOne.EntityFramework;
+using S1FunctionalProductList =
+    Il2CppSystem.Collections.Generic.List<
+        Il2CppScheduleOne.Product.FunctionalProduct>;
 using S1ItemFramework = Il2CppScheduleOne.ItemFramework;
 using S1ObjectScripts = Il2CppScheduleOne.ObjectScripts;
+using S1PlayerTasks = Il2CppScheduleOne.PlayerTasks;
 using S1Product = Il2CppScheduleOne.Product;
 using S1Tiles = Il2CppScheduleOne.Tiles;
 using S1UIStations = Il2CppScheduleOne.UI.Stations;
@@ -12,8 +16,11 @@ using TmpText = Il2CppTMPro.TextMeshProUGUI;
 using S1 = ScheduleOne;
 using S1Building = ScheduleOne.Building;
 using S1EntityFramework = ScheduleOne.EntityFramework;
+using S1FunctionalProductList =
+    System.Collections.Generic.List<ScheduleOne.Product.FunctionalProduct>;
 using S1ItemFramework = ScheduleOne.ItemFramework;
 using S1ObjectScripts = ScheduleOne.ObjectScripts;
+using S1PlayerTasks = ScheduleOne.PlayerTasks;
 using S1Product = ScheduleOne.Product;
 using S1Tiles = ScheduleOne.Tiles;
 using S1UIStations = ScheduleOne.UI.Stations;
@@ -21,6 +28,7 @@ using TmpText = TMPro.TextMeshProUGUI;
 #endif
 
 using System.Collections;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using HarmonyLib;
 using MelonLoader;
@@ -36,11 +44,50 @@ namespace MoreDrugs.Content.Mdma.Production;
 /// </summary>
 internal static class ManualTabletPressRuntime
 {
-    internal const int BatchSize = 20;
-
     private static readonly ConditionalWeakTable<
         S1ObjectScripts.BrickPress,
         ManualTabletPressInstance> Instances = new();
+
+    private static readonly ConditionalWeakTable<
+        S1ObjectScripts.BrickPress,
+        PreparedNativeLoad> PreparedNativeLoads = new();
+
+    private static readonly ConditionalWeakTable<
+        S1ObjectScripts.BrickPressHandle,
+        CircularHandleInteraction> CircularHandleInteractions = new();
+
+    private static readonly ConditionalWeakTable<
+        S1PlayerTasks.UseBrickPress,
+        S1ObjectScripts.BrickPress> ActiveTabletPressTasks = new();
+
+    private static readonly ConditionalWeakTable<
+        S1ObjectScripts.BrickPress,
+        ManualTabletPressCompletionGate> CompletionGates = new();
+
+    private static readonly MethodInfo? BeginNativePressMethod =
+        AccessTools.Method(
+            typeof(S1PlayerTasks.UseBrickPress),
+            "BeginPress");
+
+    private static readonly MethodInfo? MoveNativeHandleMethod =
+        AccessTools.Method(
+            typeof(S1ObjectScripts.BrickPressHandle),
+            "Move");
+
+    private static readonly PropertyInfo? CurrentInstructionProperty =
+        AccessTools.Property(
+            typeof(S1PlayerTasks.Task),
+            nameof(S1PlayerTasks.Task.CurrentInstruction));
+
+    private static readonly PropertyInfo? CurrentHandlePositionProperty =
+        AccessTools.Property(
+            typeof(S1ObjectScripts.BrickPressHandle),
+            nameof(S1ObjectScripts.BrickPressHandle.CurrentPosition));
+
+    private static readonly FieldInfo? CurrentHandlePositionField =
+        AccessTools.Field(
+            typeof(S1ObjectScripts.BrickPressHandle),
+            "<CurrentPosition>k__BackingField");
 
     private static ManualTabletPressAsset? _pressAsset;
     private static Func<GameObject>? _pillSourceFactory;
@@ -150,15 +197,15 @@ internal static class ManualTabletPressRuntime
 
     internal static bool TryGetSufficientCrystals(
         S1ObjectScripts.BrickPress press,
-        out S1Product.ProductItemInstance? crystals)
+        out S1ItemFramework.QualityItemInstance? crystals)
     {
         crystals = null;
         int quantity = 0;
 
         foreach (S1ItemFramework.ItemSlot slot in press.InputSlots)
         {
-            S1Product.ProductItemInstance? candidate =
-                MdmaBatchRegistry.AsProduct(slot.ItemInstance);
+            S1ItemFramework.QualityItemInstance? candidate =
+                MdmaBatchRegistry.AsQuality(slot.ItemInstance);
             if (candidate == null ||
                 !string.Equals(
                     candidate.ID,
@@ -178,7 +225,7 @@ internal static class ManualTabletPressRuntime
             }
 
             quantity += slot.Quantity;
-            if (quantity >= BatchSize)
+            if (quantity >= ManualTabletPressQuantities.CrystalsPerCycle)
                 return true;
         }
 
@@ -189,7 +236,9 @@ internal static class ManualTabletPressRuntime
     internal static S1ObjectScripts.PackagingStation.EState GetState(
         S1ObjectScripts.BrickPress press)
     {
-        if (!TryGetSufficientCrystals(press, out S1Product.ProductItemInstance? crystals) ||
+        if (!TryGetSufficientCrystals(
+                press,
+                out S1ItemFramework.QualityItemInstance? crystals) ||
             crystals == null)
         {
             return S1ObjectScripts.PackagingStation.EState.InsufficentProduct;
@@ -218,25 +267,33 @@ internal static class ManualTabletPressRuntime
         if (!MdmaBatchRegistry.GetOrCreate(outputProduct).Equals(expected))
             return S1ObjectScripts.PackagingStation.EState.Mismatch;
 
-        return output.Quantity + BatchSize <= output.StackLimit
+        return output.Quantity +
+                   ManualTabletPressQuantities.TabletsPerCycle <=
+               output.StackLimit
             ? S1ObjectScripts.PackagingStation.EState.CanBegin
             : S1ObjectScripts.PackagingStation.EState.OutputSlotFull;
     }
 
-    internal static bool CompletePress(
-        S1ObjectScripts.BrickPress press,
-        S1Product.ProductItemInstance crystals)
+    internal static bool CompletePress(S1ObjectScripts.BrickPress press)
     {
         if (!IsTabletPress(press))
             return false;
 
+        ManualTabletPressCompletionGate gate =
+            CompletionGates.GetValue(
+                press,
+                static _ => new ManualTabletPressCompletionGate());
+        if (!gate.TryCommit())
+        {
+            _logger?.Warning(
+                "Ignored a duplicate Manual Tablet Press completion for an already committed cycle.");
+            return true;
+        }
+
         if (!TryGetSufficientCrystals(
                 press,
-                out S1Product.ProductItemInstance? authoritativeCrystals) ||
+                out S1ItemFramework.QualityItemInstance? authoritativeCrystals) ||
             authoritativeCrystals == null ||
-            !authoritativeCrystals.CanStackWith(
-                crystals,
-                checkQuantities: false) ||
             GetState(press) != S1ObjectScripts.PackagingStation.EState.CanBegin)
         {
             _logger?.Warning(
@@ -254,7 +311,9 @@ internal static class ManualTabletPressRuntime
         }
 
         S1Product.ProductItemInstance? tablets =
-            AsProduct(tabletDefinition.GetDefaultInstance(BatchSize));
+            AsProduct(
+                tabletDefinition.GetDefaultInstance(
+                    ManualTabletPressQuantities.TabletsPerCycle));
         if (tablets == null)
         {
             _logger?.Error(
@@ -292,7 +351,7 @@ internal static class ManualTabletPressRuntime
                 return;
             case S1ObjectScripts.PackagingStation.EState.InsufficentProduct:
                 canvas.InstructionLabel.text =
-                    $"Drag {BatchSize}x MDMA Crystals into input slots";
+                    "Insert MDMA Crystals into input slots";
                 break;
             case S1ObjectScripts.PackagingStation.EState.Mismatch:
                 canvas.InstructionLabel.text =
@@ -300,7 +359,7 @@ internal static class ManualTabletPressRuntime
                 break;
             default:
                 canvas.InstructionLabel.text =
-                    $"Output slot needs room for {BatchSize}x MDMA";
+                    "Output slot needs room for 1x MDMA";
                 break;
         }
 
@@ -338,16 +397,16 @@ internal static class ManualTabletPressRuntime
 
     private static void ConsumeCrystals(
         S1ObjectScripts.BrickPress press,
-        S1Product.ProductItemInstance crystals)
+        S1ItemFramework.QualityItemInstance crystals)
     {
-        int remaining = BatchSize;
+        int remaining = ManualTabletPressQuantities.CrystalsPerCycle;
         foreach (S1ItemFramework.ItemSlot slot in press.InputSlots)
         {
             if (remaining <= 0)
                 break;
 
-            S1Product.ProductItemInstance? candidate =
-                MdmaBatchRegistry.AsProduct(slot.ItemInstance);
+            S1ItemFramework.QualityItemInstance? candidate =
+                MdmaBatchRegistry.AsQuality(slot.ItemInstance);
             if (candidate == null ||
                 !candidate.CanStackWith(crystals, checkQuantities: false))
             {
@@ -379,6 +438,50 @@ internal static class ManualTabletPressRuntime
         return instance as S1Product.ProductItemInstance;
 #endif
     }
+
+    private static void ArmCompletion(S1ObjectScripts.BrickPress press)
+    {
+        CompletionGates.GetValue(
+                press,
+                static _ => new ManualTabletPressCompletionGate())
+            .Arm();
+    }
+
+    private static S1Product.ProductItemInstance? CreateTaskProductSurrogate()
+    {
+        S1Product.ProductDefinition? definition =
+            GetNativeProductDefinition(MdmaProductIds.Tablets);
+        return definition == null
+            ? null
+            : AsProduct(definition.GetDefaultInstance(1));
+    }
+
+    private static bool IsTabletPressInputSlot(
+        S1ItemFramework.ItemSlot slot,
+        out S1ObjectScripts.BrickPress? press)
+    {
+        press = AsBrickPress(slot.SlotOwner);
+        if (!IsTabletPress(press) || press == null)
+            return false;
+
+        foreach (S1ItemFramework.ItemSlot inputSlot in press.InputSlots)
+        {
+            if (ReferenceEquals(inputSlot, slot) || inputSlot == slot)
+                return true;
+        }
+
+        return false;
+    }
+
+#if IL2CPPMELON
+    private static S1ObjectScripts.BrickPress? AsBrickPress(
+        S1ItemFramework.IItemSlotOwner? owner) =>
+        owner?.TryCast<S1ObjectScripts.BrickPress>();
+#else
+    private static S1ObjectScripts.BrickPress? AsBrickPress(
+        S1ItemFramework.IItemSlotOwner? owner) =>
+        owner as S1ObjectScripts.BrickPress;
+#endif
 
     private static void HideNativeRenderers(GameObject root)
     {
@@ -426,6 +529,221 @@ internal static class ManualTabletPressRuntime
         }
     }
 
+    private static void BeginAutoLoadedPress(
+        S1PlayerTasks.UseBrickPress task,
+        S1ObjectScripts.BrickPress press)
+    {
+        try
+        {
+            if (BeginNativePressMethod == null)
+            {
+                throw new MissingMethodException(
+                    typeof(S1PlayerTasks.UseBrickPress).FullName,
+                    "BeginPress");
+            }
+
+            ResetHandle(press.Handle);
+            ArmCompletion(press);
+            BeginNativePressMethod.Invoke(task, null);
+            if (PreparedNativeLoads.TryGetValue(
+                    press,
+                    out PreparedNativeLoad? prepared))
+            {
+                prepared.Hide();
+            }
+
+            try
+            {
+                CurrentInstructionProperty?.SetValue(
+                    task,
+                    "Turn the wheel clockwise to press MDMA tablets");
+            }
+            catch (Exception exception)
+            {
+                _logger?.Warning(
+                    "The Manual Tablet Press started, but its task instruction " +
+                    $"could not be renamed: {exception.Message}");
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger?.Error(
+                "Failed to start the Manual Tablet Press with its hopper " +
+                $"preloaded; preserving the native loading task: {exception}");
+        }
+        finally
+        {
+            PreparedNativeLoads.Remove(press);
+        }
+    }
+
+    internal static void RegisterCircularHandle(
+        S1ObjectScripts.BrickPressHandle handle,
+        Transform wheelPivot)
+    {
+        CircularHandleInteractions.Remove(handle);
+        CircularHandleInteractions.Add(
+            handle,
+            new CircularHandleInteraction(wheelPivot));
+    }
+
+    private static void ResetHandle(S1ObjectScripts.BrickPressHandle handle)
+    {
+        handle.SetPosition(0f);
+        try
+        {
+            if (CurrentHandlePositionProperty?.SetMethod != null)
+                CurrentHandlePositionProperty.SetValue(handle, 0f);
+            else
+                CurrentHandlePositionField?.SetValue(handle, 0f);
+        }
+        catch (Exception exception)
+        {
+            _logger?.Warning(
+                "The Manual Tablet Press wheel target was reset, but its " +
+                $"rendered position will return home normally: {exception.Message}");
+        }
+
+        if (CircularHandleInteractions.TryGetValue(
+                handle,
+                out CircularHandleInteraction? interaction))
+        {
+            interaction.Reset();
+        }
+    }
+
+    private sealed class CircularHandleInteraction
+    {
+        private const float MinimumPointerRadiusPixels = 12f;
+
+        private readonly Transform _wheelPivot;
+
+        private bool _dragging;
+        private float _lastPointerAngle;
+        private float _accumulatedDegrees;
+
+        internal CircularHandleInteraction(Transform wheelPivot)
+        {
+            _wheelPivot = wheelPivot;
+        }
+
+        internal void BeginDrag(S1ObjectScripts.BrickPressHandle handle)
+        {
+            if (!TryGetPointerAngle(out _lastPointerAngle))
+                return;
+
+            _accumulatedDegrees =
+                handle.CurrentPosition *
+                ManualTabletPressWheel.RequiredDegrees;
+            _dragging = true;
+        }
+
+        internal void EndDrag()
+        {
+            _dragging = false;
+        }
+
+        internal void Reset()
+        {
+            _dragging = false;
+            _lastPointerAngle = 0f;
+            _accumulatedDegrees = 0f;
+        }
+
+        internal bool Tick(S1ObjectScripts.BrickPressHandle handle)
+        {
+            if (S1.GameInput.GetCurrentInputDeviceIsGamepad() ||
+                MoveNativeHandleMethod == null)
+            {
+                return false;
+            }
+
+            if (!handle.Locked)
+            {
+                if (_dragging &&
+                    TryGetPointerAngle(out float pointerAngle))
+                {
+                    _accumulatedDegrees =
+                        ManualTabletPressWheel.AdvanceClockwise(
+                            _accumulatedDegrees,
+                            _lastPointerAngle,
+                            pointerAngle);
+                    _lastPointerAngle = pointerAngle;
+                    handle.SetPosition(
+                        ManualTabletPressWheel.ToProgress(
+                            _accumulatedDegrees));
+                }
+                else if (!_dragging)
+                {
+                    float target =
+                        Mathf.MoveTowards(
+                            handle.TargetPosition,
+                            0f,
+                            Time.deltaTime);
+                    _accumulatedDegrees =
+                        target *
+                        ManualTabletPressWheel.RequiredDegrees;
+                    handle.SetPosition(target);
+                }
+            }
+
+            MoveNativeHandleMethod.Invoke(handle, null);
+            return true;
+        }
+
+        private bool TryGetPointerAngle(out float angle)
+        {
+            angle = 0f;
+            Camera camera = Camera.main;
+            if (camera == null)
+                return false;
+
+            Vector3 wheelScreenPoint =
+                camera.WorldToScreenPoint(_wheelPivot.position);
+            if (wheelScreenPoint.z <= 0f)
+                return false;
+
+            Vector2 pointer = S1.GameInput.MousePosition;
+            Vector2 offset =
+                pointer -
+                new Vector2(wheelScreenPoint.x, wheelScreenPoint.y);
+            if (offset.sqrMagnitude <
+                MinimumPointerRadiusPixels * MinimumPointerRadiusPixels)
+            {
+                return false;
+            }
+
+            angle = Mathf.Atan2(offset.y, offset.x) * Mathf.Rad2Deg;
+            return true;
+        }
+    }
+
+    private sealed class PreparedNativeLoad
+    {
+        private readonly S1PlayerTasks.Draggable _container;
+        private readonly S1FunctionalProductList _products;
+
+        internal PreparedNativeLoad(
+            S1PlayerTasks.Draggable container,
+            S1FunctionalProductList products)
+        {
+            _container = container;
+            _products = products;
+        }
+
+        internal void Hide()
+        {
+            if (_container != null)
+                _container.gameObject.SetActive(false);
+
+            foreach (S1Product.FunctionalProduct product in _products)
+            {
+                if (product != null)
+                    product.gameObject.SetActive(false);
+            }
+        }
+    }
+
     [HarmonyPatch(
         typeof(S1ObjectScripts.BrickPress),
         nameof(S1ObjectScripts.BrickPress.InitializeGridItem))]
@@ -443,6 +761,31 @@ internal static class ManualTabletPressRuntime
     }
 
     [HarmonyPatch(
+        typeof(S1ItemFramework.ItemSlot),
+        nameof(S1ItemFramework.ItemSlot.DoesItemMatchHardFilters))]
+    private static class TabletPressInputFilterPatch
+    {
+        private static bool Prefix(
+            S1ItemFramework.ItemSlot __instance,
+            S1ItemFramework.ItemInstance item,
+            ref bool __result)
+        {
+            if (item == null ||
+                !string.Equals(
+                    item.ID,
+                    MdmaProductIds.Crystals,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !IsTabletPressInputSlot(__instance, out _))
+            {
+                return true;
+            }
+
+            __result = true;
+            return false;
+        }
+    }
+
+    [HarmonyPatch(
         typeof(S1ObjectScripts.BrickPress),
         nameof(S1ObjectScripts.BrickPress.HasSufficientProduct))]
     private static class HasSufficientProductPatch
@@ -455,10 +798,11 @@ internal static class ManualTabletPressRuntime
             if (!IsTabletPress(__instance))
                 return true;
 
-            __result = TryGetSufficientCrystals(
-                __instance,
-                out S1Product.ProductItemInstance? crystals);
-            product = crystals!;
+            __result =
+                TryGetSufficientCrystals(
+                    __instance,
+                    out S1ItemFramework.QualityItemInstance? _) &&
+                (product = CreateTaskProductSurrogate()!) != null;
             return false;
         }
     }
@@ -488,7 +832,134 @@ internal static class ManualTabletPressRuntime
         private static bool Prefix(
             S1ObjectScripts.BrickPress __instance,
             S1Product.ProductItemInstance product) =>
-            !CompletePress(__instance, product);
+            !CompletePress(__instance);
+    }
+
+    [HarmonyPatch(
+        typeof(S1ObjectScripts.BrickPress),
+        nameof(S1ObjectScripts.BrickPress.PlayPressAnim))]
+    private static class PlayPressAnimPatch
+    {
+        private static void Prefix(S1ObjectScripts.BrickPress __instance)
+        {
+            if (IsTabletPress(__instance))
+                ArmCompletion(__instance);
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ObjectScripts.BrickPress),
+        nameof(S1ObjectScripts.BrickPress.CreateFunctionalContainer))]
+    private static class CreateFunctionalContainerPatch
+    {
+        private static void Postfix(
+            S1ObjectScripts.BrickPress __instance,
+            S1PlayerTasks.Draggable __result,
+            S1FunctionalProductList products)
+        {
+            if (!IsTabletPress(__instance) ||
+                __result == null ||
+                products == null)
+            {
+                return;
+            }
+
+            PreparedNativeLoads.Remove(__instance);
+            PreparedNativeLoads.Add(
+                __instance,
+                new PreparedNativeLoad(__result, products));
+        }
+    }
+
+    [HarmonyPatch]
+    private static class UseBrickPressConstructorPatch
+    {
+        private static MethodBase? TargetMethod() =>
+            AccessTools.Constructor(
+                typeof(S1PlayerTasks.UseBrickPress),
+                new[]
+                {
+                    typeof(S1ObjectScripts.BrickPress),
+                    typeof(S1Product.ProductItemInstance),
+                });
+
+        private static void Postfix(
+            S1PlayerTasks.UseBrickPress __instance,
+            S1ObjectScripts.BrickPress _press)
+        {
+            if (IsTabletPress(_press))
+            {
+                ActiveTabletPressTasks.Remove(__instance);
+                ActiveTabletPressTasks.Add(__instance, _press);
+                BeginAutoLoadedPress(__instance, _press);
+            }
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1PlayerTasks.UseBrickPress),
+        nameof(S1PlayerTasks.UseBrickPress.StopTask))]
+    private static class UseBrickPressStopTaskPatch
+    {
+        private static void Postfix(S1PlayerTasks.UseBrickPress __instance)
+        {
+            if (!ActiveTabletPressTasks.TryGetValue(
+                    __instance,
+                    out S1ObjectScripts.BrickPress? press))
+            {
+                return;
+            }
+
+            ResetHandle(press.Handle);
+            ActiveTabletPressTasks.Remove(__instance);
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ObjectScripts.BrickPressHandle),
+        nameof(S1ObjectScripts.BrickPressHandle.ClickStart))]
+    private static class HandleClickStartPatch
+    {
+        private static void Postfix(
+            S1ObjectScripts.BrickPressHandle __instance)
+        {
+            if (CircularHandleInteractions.TryGetValue(
+                    __instance,
+                    out CircularHandleInteraction? interaction))
+            {
+                interaction.BeginDrag(__instance);
+            }
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ObjectScripts.BrickPressHandle),
+        nameof(S1ObjectScripts.BrickPressHandle.ClickEnd))]
+    private static class HandleClickEndPatch
+    {
+        private static void Postfix(
+            S1ObjectScripts.BrickPressHandle __instance)
+        {
+            if (CircularHandleInteractions.TryGetValue(
+                    __instance,
+                    out CircularHandleInteraction? interaction))
+            {
+                interaction.EndDrag();
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(S1ObjectScripts.BrickPressHandle), "LateUpdate")]
+    private static class HandleLateUpdatePatch
+    {
+        private static bool Prefix(
+            S1ObjectScripts.BrickPressHandle __instance)
+        {
+            return !CircularHandleInteractions.TryGetValue(
+                       __instance,
+                       out CircularHandleInteraction? interaction) ||
+                   !interaction.Tick(__instance);
+        }
     }
 
     [HarmonyPatch(typeof(S1UIStations.BrickPressCanvas), "UpdateUI")]
@@ -513,7 +984,7 @@ internal static class ManualTabletPressRuntime
 
 internal sealed class ManualTabletPressInstance
 {
-    private const int MaximumVisibleTablets = 20;
+    private const int MaximumVisibleTablets = 6;
     private const float EjectionIntervalSeconds = 0.11f;
     private const float GuidedPathSeconds = 0.65f;
 
@@ -521,7 +992,7 @@ internal sealed class ManualTabletPressInstance
     private readonly Func<GameObject> _pillSourceFactory;
     private readonly ManualTabletPressRig _rig;
     private readonly GameObject _hopperCrystals;
-    private readonly GameObject _shoeGranules;
+    private readonly GameObject _shoeCrystal;
     private readonly GameObject _dieGranules;
     private readonly Quaternion _handleHomeRotation;
     private readonly Vector3 _ramRaised;
@@ -561,15 +1032,15 @@ internal sealed class ManualTabletPressInstance
                 "CrystalPile",
                 "CrystalChunk_A",
                 "CrystalChunk_B");
-        _shoeGranules =
+        _shoeCrystal =
             CreateCrystalVisual(
                 crystalSource,
-                "MoreDrugs_FeedGranules",
+                "MoreDrugs_FeedCrystal",
                 _rig.FeedShoeAssembly,
                 Require(_rig.Root, "FeedPowder"),
-                0.58f,
-                0.002f,
-                "CrystalGranules");
+                0.44f,
+                0.008f,
+                "CrystalChunk_A");
         _dieGranules =
             CreateCrystalVisual(
                 crystalSource,
@@ -581,16 +1052,24 @@ internal sealed class ManualTabletPressInstance
                 "CrystalGranules");
 
         _handleHomeRotation = _rig.HandlePivot.localRotation;
-        _ramRaised =
-            _rig.RamAssembly.parent.InverseTransformPoint(_rig.PressRaised.position);
+        _ramRaised = _rig.RamAssembly.localPosition;
         _ramLowered =
-            _rig.RamAssembly.parent.InverseTransformPoint(_rig.PressLowered.position);
+            _ramRaised +
+            _rig.RamAssembly.parent.InverseTransformVector(
+                _rig.PressLowered.position -
+                _rig.PressRaised.position);
         _feedHome = _rig.FeedShoeAssembly.localPosition;
-        Vector3 dieInFeedSpace =
-            _rig.FeedShoeAssembly.parent.InverseTransformPoint(
+        Transform feedParent = _rig.FeedShoeAssembly.parent;
+        Vector3 feedPocketInParent =
+            feedParent.InverseTransformPoint(
+                Require(_rig.Root, "FeedPowder").position);
+        Vector3 dieInFeedParent =
+            feedParent.InverseTransformPoint(
                 _rig.MouldDetector.position);
         _feedAtDie = new Vector3(
-            dieInFeedSpace.x,
+            _feedHome.x +
+            dieInFeedParent.x -
+            feedPocketInParent.x,
             _feedHome.y,
             _feedHome.z);
         _ejectorHome = _rig.EjectorAssembly.localPosition;
@@ -609,30 +1088,36 @@ internal sealed class ManualTabletPressInstance
 
     private void ConfigureNativeInteraction()
     {
-        Vector3 cameraFocus =
+        Vector3 pouringFocus =
             _rig.MouldDetector.position +
             _rig.Root.transform.up * 0.16f;
         _rig.CameraPressing.LookAt(
-            cameraFocus,
+            _rig.HandlePivot.position,
             _rig.Root.transform.up);
         _rig.CameraPouring.LookAt(
-            _rig.MouldDetector.position +
-            _rig.Root.transform.up * 0.08f,
+            pouringFocus,
+            _rig.Root.transform.up);
+        _rig.PlaneNormal.LookAt(
+            _rig.CameraPressing.position,
             _rig.Root.transform.up);
 
         _press.CameraPosition = _rig.CameraPressing;
-        _press.CameraPosition_Pouring = _rig.CameraPouring;
+        _press.CameraPosition_Pouring = _rig.CameraPressing;
         _press.CameraPosition_Raising = _rig.CameraPressing;
         _press.StandPoint = _rig.StandPoint;
         _press.ContainerSpawnPoint = _rig.ContainerSpawnPoint;
 
         _press.Handle.PlaneNormal = _rig.PlaneNormal;
-        _press.Handle.RaisedTransform = _rig.HandleRaised;
+        _press.Handle.RaisedTransform = _rig.HandleClickableAnchor;
         _press.Handle.LoweredTransform = _rig.HandleLowered;
 
         Transform clickable = _press.Handle.HandleClickable.transform;
         clickable.position = _rig.HandleClickableAnchor.position;
         clickable.rotation = _rig.HandleClickableAnchor.rotation;
+        clickable.SetParent(_rig.HandlePivot, true);
+        ManualTabletPressRuntime.RegisterCircularHandle(
+            _press.Handle,
+            _rig.HandlePivot);
 
         Transform mould = _press.MouldDetection.transform;
         mould.position = _rig.MouldDetector.position;
@@ -647,7 +1132,11 @@ internal sealed class ManualTabletPressInstance
     {
         _rig.HandlePivot.localRotation =
             _handleHomeRotation *
-            Quaternion.AngleAxis(360f * progress, Vector3.forward);
+            Quaternion.AngleAxis(
+                360f *
+                ManualTabletPressWheel.RequiredTurns *
+                progress,
+                Vector3.forward);
         _rig.RamAssembly.localPosition =
             Vector3.Lerp(_ramRaised, _ramLowered, progress);
         float ejectProgress =
@@ -670,13 +1159,13 @@ internal sealed class ManualTabletPressInstance
         _rig.FeedShoeAssembly.localPosition =
             Vector3.Lerp(_feedHome, _feedAtDie, feedProgress);
 
-        bool powderInShoe = hasCrystals && progress < 0.28f;
+        bool crystalOnShoe = hasCrystals && progress < 0.28f;
         bool powderInDie =
             hasCrystals &&
             progress >= 0.28f &&
             progress < 0.82f;
         _hopperCrystals.SetActive(hasCrystals);
-        _shoeGranules.SetActive(powderInShoe);
+        _shoeCrystal.SetActive(crystalOnShoe);
         _dieGranules.SetActive(powderInDie);
     }
 
@@ -823,8 +1312,13 @@ internal sealed class ManualTabletPressInstance
         tablet.SetActive(true);
 
         foreach (Collider collider in tablet.GetComponentsInChildren<Collider>(true))
+        {
+            collider.enabled = false;
             UnityEngine.Object.Destroy(collider);
-        AddTabletCollider(tablet);
+        }
+
+        foreach (Collider tabletCollider in AddTabletColliders(tablet))
+            IgnoreNativePressColliders(tabletCollider);
         return tablet;
     }
 
@@ -888,13 +1382,14 @@ internal sealed class ManualTabletPressInstance
         for (int index = 0; index < count; index++)
         {
             GameObject tablet = CreateTabletVisual();
-            int row = index / 5;
-            int column = index % 5;
-            float x = (column - 2f) * 0.055f +
+            const int columns = 3;
+            int row = index / columns;
+            int column = index % columns;
+            float x = (column - 1f) * 0.07f +
                       ManualTabletPressEjection.Jitter(
                           (uint)index + 3u,
                           0.012f);
-            float z = (row - 1.5f) * 0.065f +
+            float z = (row - 0.5f) * 0.09f +
                       ManualTabletPressEjection.Jitter(
                           (uint)index + 17u,
                           0.012f);
@@ -939,23 +1434,39 @@ internal sealed class ManualTabletPressInstance
         collider.size = filter.sharedMesh.bounds.size;
     }
 
-    private static void AddTabletCollider(GameObject tablet)
+    private void IgnoreNativePressColliders(Collider tabletCollider)
     {
-        Renderer[] renderers = tablet.GetComponentsInChildren<Renderer>(true);
-        if (renderers.Length == 0)
-            return;
+        foreach (Collider collider in
+                 _press.GetComponentsInChildren<Collider>(true))
+        {
+            if (collider == tabletCollider ||
+                collider.transform.IsChildOf(_rig.Root.transform))
+            {
+                continue;
+            }
 
-        Bounds bounds = renderers[0].bounds;
-        for (int index = 1; index < renderers.Length; index++)
-            bounds.Encapsulate(renderers[index].bounds);
+            Physics.IgnoreCollision(tabletCollider, collider, true);
+        }
+    }
 
-        Vector3 scale = tablet.transform.lossyScale;
-        BoxCollider collider = tablet.AddComponent<BoxCollider>();
-        collider.center = tablet.transform.InverseTransformPoint(bounds.center);
-        collider.size = new Vector3(
-            SafeDivide(bounds.size.x, scale.x),
-            SafeDivide(bounds.size.y, scale.y),
-            SafeDivide(bounds.size.z, scale.z));
+    private static IReadOnlyList<Collider> AddTabletColliders(
+        GameObject tablet)
+    {
+        var colliders = new List<Collider>();
+        foreach (MeshFilter filter in
+                 tablet.GetComponentsInChildren<MeshFilter>(true))
+        {
+            if (filter.sharedMesh == null)
+                continue;
+
+            MeshCollider collider =
+                filter.gameObject.AddComponent<MeshCollider>();
+            collider.sharedMesh = filter.sharedMesh;
+            collider.convex = true;
+            colliders.Add(collider);
+        }
+
+        return colliders;
     }
 
     private void DestroyAllTablets()

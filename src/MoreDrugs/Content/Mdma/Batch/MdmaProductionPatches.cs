@@ -27,10 +27,10 @@ internal static class MdmaProductionPatches
             S1ItemFramework.EQuality quality,
             S1Storage.StorableItemInstance __result)
         {
-            S1Product.ProductItemInstance? product = AsProduct(__result);
-            if (product == null ||
+            S1ItemFramework.QualityItemInstance? item = AsQuality(__result);
+            if (item == null ||
                 !MdmaProductIds.TryGetForm(
-                    product.ID,
+                    item.ID,
                     out MdmaProductForm form))
             {
                 return;
@@ -49,17 +49,17 @@ internal static class MdmaProductionPatches
                         MdmaTabletImprint.Heart,
                         string.Empty);
 
-            MdmaBatchRegistry.Attach(product, profile);
+            MdmaBatchRegistry.Attach(item, profile);
         }
     }
 
 #if IL2CPPMELON
-    private static S1Product.ProductItemInstance? AsProduct(
+    private static S1ItemFramework.QualityItemInstance? AsQuality(
         S1Storage.StorableItemInstance? instance) =>
-        instance?.TryCast<S1Product.ProductItemInstance>();
+        instance?.TryCast<S1ItemFramework.QualityItemInstance>();
 #else
-    private static S1Product.ProductItemInstance? AsProduct(
+    private static S1ItemFramework.QualityItemInstance? AsQuality(
         S1Storage.StorableItemInstance? instance) =>
-        instance as S1Product.ProductItemInstance;
+        instance as S1ItemFramework.QualityItemInstance;
 #endif
 }

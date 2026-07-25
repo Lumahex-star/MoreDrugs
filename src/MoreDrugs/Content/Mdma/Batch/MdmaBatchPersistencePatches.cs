@@ -35,7 +35,7 @@ internal static class MdmaBatchPersistencePatches
             ref bool __result)
         {
             if (!__result ||
-                !MdmaProductIds.TryGetForm(__instance.ID, out _))
+                !IsTablets(__instance.ID))
             {
                 return;
             }
@@ -44,7 +44,7 @@ internal static class MdmaBatchPersistencePatches
                 MdmaBatchRegistry.AsProduct(other);
             __result =
                 otherProduct != null &&
-                MdmaProductIds.TryGetForm(otherProduct.ID, out _) &&
+                IsTablets(otherProduct.ID) &&
                 MdmaBatchRegistry.GetOrCreate(__instance)
                     .Equals(MdmaBatchRegistry.GetOrCreate(otherProduct));
         }
@@ -61,7 +61,7 @@ internal static class MdmaBatchPersistencePatches
         {
             S1Product.ProductItemInstance? copy =
                 MdmaBatchRegistry.AsProduct(__result);
-            if (copy != null)
+            if (copy != null && IsTablets(__instance.ID))
                 MdmaBatchRegistry.Copy(__instance, copy);
         }
     }
@@ -75,7 +75,7 @@ internal static class MdmaBatchPersistencePatches
             S1Product.ProductItemInstance __instance,
             S1PersistenceData.ItemData __result)
         {
-            if (MdmaProductIds.TryGetForm(__instance.ID, out _))
+            if (IsTablets(__instance.ID))
             {
                 MdmaBatchRegistry.AssociateSaveData(
                     __result,
@@ -124,14 +124,27 @@ internal static class MdmaBatchPersistencePatches
     {
         private static void Postfix(
             string itemString,
-            S1ItemFramework.ItemInstance __result)
+            ref S1ItemFramework.ItemInstance __result)
         {
-            S1Product.ProductItemInstance? product =
-                MdmaBatchRegistry.AsProduct(__result);
-            if (product == null ||
-                !MdmaProductIds.TryGetForm(product.ID, out _))
+            S1ItemFramework.QualityItemInstance? item =
+                MdmaBatchRegistry.AsQuality(__result);
+            if (item == null ||
+                !MdmaProductIds.TryGetForm(
+                    item.ID,
+                    out MdmaProductForm form))
             {
                 return;
+            }
+
+            if (form == MdmaProductForm.Crystals &&
+                MdmaBatchRegistry.AsProduct(item) != null)
+            {
+                item =
+                    new S1ItemFramework.QualityItemInstance(
+                        item.Definition,
+                        item.Quantity,
+                        item.Quality);
+                __result = item;
             }
 
             if (TryReadJsonPayload(itemString, out string payload) &&
@@ -140,17 +153,17 @@ internal static class MdmaBatchPersistencePatches
             {
                 try
                 {
-                    MdmaBatchRegistry.Attach(product, profile);
+                    MdmaBatchRegistry.Attach(item, profile);
                     return;
                 }
                 catch (ArgumentException)
                 {
                     MelonLogger.Warning(
-                        $"Ignored mismatched MDMA batch data for '{product.ID}'.");
+                        $"Ignored mismatched MDMA batch data for '{item.ID}'.");
                 }
             }
 
-            MdmaBatchRegistry.GetOrCreate(product);
+            MdmaBatchRegistry.GetOrCreate(item);
         }
     }
 
@@ -163,7 +176,7 @@ internal static class MdmaBatchPersistencePatches
             S1Product.ProductItemInstance __instance,
             FishWriter writer)
         {
-            if (!MdmaProductIds.TryGetForm(__instance.ID, out _))
+            if (!IsTablets(__instance.ID))
                 return;
 
             writer.WriteString(
@@ -181,7 +194,7 @@ internal static class MdmaBatchPersistencePatches
             S1Product.ProductItemInstance __instance,
             FishReader reader)
         {
-            if (!MdmaProductIds.TryGetForm(__instance.ID, out _))
+            if (!IsTablets(__instance.ID))
                 return;
 
             string payload = reader.ReadString();
@@ -205,6 +218,130 @@ internal static class MdmaBatchPersistencePatches
             MdmaBatchRegistry.GetOrCreate(__instance);
         }
     }
+
+    [HarmonyPatch(
+        typeof(S1ItemFramework.QualityItemInstance),
+        nameof(S1ItemFramework.QualityItemInstance.CanStackWith))]
+    private static class CrystalCanStackWithPatch
+    {
+        private static void Postfix(
+            S1ItemFramework.QualityItemInstance __instance,
+            S1ItemFramework.ItemInstance other,
+            ref bool __result)
+        {
+            if (!__result || !IsCrystals(__instance.ID))
+                return;
+
+            S1ItemFramework.QualityItemInstance? otherQuality =
+                MdmaBatchRegistry.AsQuality(other);
+            __result =
+                otherQuality != null &&
+                IsCrystals(otherQuality.ID) &&
+                MdmaBatchRegistry.GetOrCreate(__instance)
+                    .Equals(MdmaBatchRegistry.GetOrCreate(otherQuality));
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ItemFramework.QualityItemInstance),
+        nameof(S1ItemFramework.QualityItemInstance.GetCopy))]
+    private static class CrystalGetCopyPatch
+    {
+        private static void Postfix(
+            S1ItemFramework.QualityItemInstance __instance,
+            S1ItemFramework.ItemInstance __result)
+        {
+            if (!IsCrystals(__instance.ID))
+                return;
+
+            S1ItemFramework.QualityItemInstance? copy =
+                MdmaBatchRegistry.AsQuality(__result);
+            if (copy != null)
+                MdmaBatchRegistry.Copy(__instance, copy);
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ItemFramework.QualityItemInstance),
+        nameof(S1ItemFramework.QualityItemInstance.GetItemData))]
+    private static class CrystalGetItemDataPatch
+    {
+        private static void Postfix(
+            S1ItemFramework.QualityItemInstance __instance,
+            S1PersistenceData.ItemData __result)
+        {
+            if (IsCrystals(__instance.ID))
+            {
+                MdmaBatchRegistry.AssociateSaveData(
+                    __result,
+                    MdmaBatchRegistry.GetOrCreate(__instance));
+            }
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ItemFramework.QualityItemInstance),
+        nameof(S1ItemFramework.QualityItemInstance.Write))]
+    private static class CrystalWritePatch
+    {
+        private static void Postfix(
+            S1ItemFramework.QualityItemInstance __instance,
+            FishWriter writer)
+        {
+            if (!IsCrystals(__instance.ID))
+                return;
+
+            writer.WriteString(
+                MdmaBatchCodec.Encode(
+                    MdmaBatchRegistry.GetOrCreate(__instance)));
+        }
+    }
+
+    [HarmonyPatch(
+        typeof(S1ItemFramework.QualityItemInstance),
+        nameof(S1ItemFramework.QualityItemInstance.Read))]
+    private static class CrystalReadPatch
+    {
+        private static void Postfix(
+            S1ItemFramework.QualityItemInstance __instance,
+            FishReader reader)
+        {
+            if (!IsCrystals(__instance.ID))
+                return;
+
+            string payload = reader.ReadString();
+            if (MdmaBatchCodec.TryDecode(
+                    payload,
+                    out MdmaBatchProfile? profile) &&
+                profile != null)
+            {
+                try
+                {
+                    MdmaBatchRegistry.Attach(__instance, profile);
+                    return;
+                }
+                catch (ArgumentException)
+                {
+                    MelonLogger.Warning(
+                        $"Ignored mismatched network MDMA batch data for '{__instance.ID}'.");
+                }
+            }
+
+            MdmaBatchRegistry.GetOrCreate(__instance);
+        }
+    }
+
+    private static bool IsTablets(string? itemId) =>
+        string.Equals(
+            itemId,
+            MdmaProductIds.Tablets,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCrystals(string? itemId) =>
+        string.Equals(
+            itemId,
+            MdmaProductIds.Crystals,
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool HasJsonProperties(string json, int closingBrace)
     {

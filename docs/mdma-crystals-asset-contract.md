@@ -4,8 +4,9 @@
 
 `mdma_crystals.glb` is a game-ready visual for the prepared crystalline batch
 produced by MoreDrugs before it is converted into tablets. It must work as a
-loose-item visual, generated icon source, station visual, and native-packaging
-content source.
+held-item visual, generated icon source, station visual, stored-item visual,
+and tablet-press process source. Crystals are deliberately not a product and
+must never receive native packaging content.
 
 ## Required form
 

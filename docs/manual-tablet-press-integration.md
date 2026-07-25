@@ -7,19 +7,21 @@ but it must not reuse the native Brick Press product-conversion rule.
 
 Schedule I's Brick Press exposes a narrow and useful mechanical contract:
 
-- Clicking the handle begins a drag projected onto a handle-local plane.
-- Cursor height between raised and lowered reference transforms maps to normalized
-  progress from zero to one. Gamepad rotation input updates the same progress.
-- The handle rotates through a complete 360-degree turn.
+- The native handle uses a vertical drag projected onto a handle-local plane.
+  MoreDrugs replaces that mouse mapping only for its tablet press with angular
+  tracking around the visible wheel center.
+- Three clockwise wheel revolutions map to normalized progress from zero to one.
+  Gamepad rotation input continues through the native input path.
 - The press head linearly interpolates between raised and lowered transforms.
 - Releasing an unlocked handle lets it return toward zero.
-- The task switches between pouring and pressing camera anchors, enables the
-  handle only during the pressing phase, and completes at normalized progress one.
+- The native task switches between pouring and pressing camera anchors, enables
+  the handle only during the pressing phase, and completes at normalized
+  progress one.
 
-The native station then consumes 20 compatible product units and produces one
-copy with brick packaging. That final rule is specific to bricks. The MDMA
-station instead needs a server-authoritative crystals-to-tablets conversion that
-preserves the custom batch identifier, purity, consistency, safety, color, and
+The native station consumes 20 compatible product units and produces one copy
+with brick packaging. That final rule is specific to bricks. The MDMA station
+instead consumes and produces one unit per completed wheel cycle while
+preserving the custom batch identifier, purity, consistency, safety, color, and
 imprint through save and multiplayer serialization.
 
 ## Exported runtime contract
@@ -32,7 +34,7 @@ use the baked clip as authoritative gameplay.
 | --- | --- |
 | `PedestalAssembly` | Floor-standing base; keeps the work surface at player height |
 | `MachineAssembly` | Complete press mechanism mounted on the pedestal |
-| `HandlePivot` | Rotate one full turn from normalized progress zero to one |
+| `HandlePivot` | Rotate three full turns from normalized progress zero to one |
 | `RamAssembly` | Move with press progress |
 | `FeedShoeAssembly` | Slide on fixed guide rails from the hopper to the die |
 | `FeedPowderAssembly` | Show powder in the shoe pocket before transfer |
@@ -67,18 +69,43 @@ This consumer-side clone-and-adapt path does not mutate the native Brick Press
 definition and does not require a new S1API prefab API. Existing Brick Press
 instances and other mods retain their exact behavior.
 
+Unlike loose native products, MDMA crystals are a granular production
+intermediate represented by a `QualityItemInstance`, not a
+`ProductItemInstance`. They therefore do not inherit product effects,
+consumption, sale, discovery, or packaging behavior. The tablet press narrowly
+accepts that intermediate in its own native input slots without weakening
+filters on any other station. Spawning 20 copies in the
+Brick Press bucket produces oversized, unstable physics objects and asks the
+player to pour them into a die even though the authored machine has a fixed
+hopper and guided feed shoe. The tablet press therefore treats placing one or
+more crystals into its inventory slots as loading the hopper. `BEGIN` preserves
+the native task lifecycle but skips its temporary bucket and pouring phase,
+opens on the pressing camera, and enables the wheel immediately. The hidden
+native task objects remain owned by the native cleanup path, so cancellation
+and completion do not leak temporary objects.
+
 The adapter replaces only the native final conversion for the MoreDrugs station:
 
-1. Require 20 compatible MDMA crystal units from one batch.
+1. Require at least one compatible MDMA crystal in the input slots.
 2. Preserve the batch identifier, purity, consistency, contamination, and test
    status while adding the selected tablet color and imprint.
-3. Create 20 tablet units, add them through the native replicated output slot,
-   and consume the 20 crystal units through the native replicated input slots.
+3. Create one tablet, add it through the native replicated output slot, and
+   consume one crystal through the native replicated input slots.
 4. Reconstruct a deterministic settled tray from replicated output quantity on
-   load or late join.
+   load or late join. The tray shows at most six representative tablets even
+   though the replicated inventory slot retains the full output quantity.
 5. During a live press, guide each local tablet visual from the die toward the
    tray, then hand it to Unity physics with deterministic variation. These
-   rigidbodies are cosmetic and never become authoritative network state.
+   rigidbodies ignore the hidden native Brick Press collision shell, interact
+   with the authored tray, and never become authoritative network state.
+6. Arm one authoritative completion token when a press task begins and consume
+   it before mutating slots. Repeated native cleanup/completion callbacks for
+   the same cycle cannot produce or animate a second tablet.
+
+The MDMA presentation profile opts into S1API's convex functional-product mesh
+colliders. This removes the larger inherited product collider only for MDMA,
+allowing loose tablets to fit into jars and Packaging Station Mk2 while leaving
+all existing product profiles on S1API's legacy collision path.
 
 The remaining validation boundary is in-game: host, joining client, reconnect,
 save/reload, cancellation, full output, and mismatched-mod-version behavior in

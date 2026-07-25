@@ -22,6 +22,10 @@
              Link="Content\Mdma\Batch\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Production\ManualTabletPressEjection.cs"
              Link="Content\Mdma\Production\ManualTabletPressEjection.cs" />
+    <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Production\ManualTabletPressWheel.cs"
+             Link="Content\Mdma\Production\ManualTabletPressWheel.cs" />
+    <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Production\ManualTabletPressQuantities.cs"
+             Link="Content\Mdma\Production\ManualTabletPressQuantities.cs" />
     <None Include="..\..\src\MoreDrugs\Assets\Models\manual_tablet_press.glb"
           Link="Assets\manual_tablet_press.glb"
           CopyToOutputDirectory="PreserveNewest" />

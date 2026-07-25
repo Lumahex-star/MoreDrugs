@@ -1,10 +1,20 @@
 #if IL2CPPMELON
 using Il2CppInterop.Runtime.InteropTypes;
 using S1 = Il2CppScheduleOne;
+using S1AvatarEquipping = Il2CppScheduleOne.AvatarFramework.Equipping;
+using S1Equipping = Il2CppScheduleOne.Equipping;
+using S1ItemFramework = Il2CppScheduleOne.ItemFramework;
 using S1Product = Il2CppScheduleOne.Product;
+using S1StationFramework = Il2CppScheduleOne.StationFramework;
+using S1Storage = Il2CppScheduleOne.Storage;
 #elif MONOMELON
 using S1 = ScheduleOne;
+using S1AvatarEquipping = ScheduleOne.AvatarFramework.Equipping;
+using S1Equipping = ScheduleOne.Equipping;
+using S1ItemFramework = ScheduleOne.ItemFramework;
 using S1Product = ScheduleOne.Product;
+using S1StationFramework = ScheduleOne.StationFramework;
+using S1Storage = ScheduleOne.Storage;
 #endif
 
 using MelonLoader;
@@ -38,6 +48,8 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         "MoreDrugs.Assets.Models.mdma_crystals.glb";
     private const string TabletPressIconResource =
         "MoreDrugs.Assets.Icons.manual_tablet_press.png";
+    private const string CrystalAvatarPath =
+        "MoreDrugs/Items/MDMACrystals/Held";
 
     private readonly MelonLogger.Instance _logger;
     private readonly EmbeddedGlbAsset _heartPill =
@@ -48,13 +60,10 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 
     private ProductKind? _productKind;
     private ProductPresentationProfile? _presentationProfile;
-    private ProductPresentationProfile? _crystalPresentationProfile;
     private ProductPackagingContentProfile? _baggieProfile;
     private ProductPackagingContentProfile? _jarProfile;
-    private ProductPackagingContentProfile? _crystalBaggieProfile;
-    private ProductPackagingContentProfile? _crystalJarProfile;
     private CustomProductDefinition? _definition;
-    private CustomProductDefinition? _crystalDefinition;
+    private S1API.Items.Quality.QualityItemDefinition? _crystalDefinition;
     private S1API.Items.Buildable.BuildableItemDefinition? _tabletPressDefinition;
     private ChemistryStationRecipe? _recipe;
     private ProductKindMetadata? _metadata;
@@ -63,6 +72,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private Sprite? _tabletPressIcon;
     private bool _tabletPressAddedToShop;
     private bool _tabletPressIconGenerated;
+    private bool _crystalIconGenerated;
 
     internal MdmaModule(MelonLogger.Instance logger)
     {
@@ -101,13 +111,12 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         GameObject pillSource = _heartPill.GetOrLoad();
         GameObject crystalSource = _mdmaCrystals.GetOrLoad();
         EnsurePresentationRegistered(template, pillSource);
-        EnsureCrystalPresentationRegistered(crystalSource);
         EnsurePackagingRegistered(pillSource);
-        EnsureCrystalPackagingRegistered(crystalSource);
         RegisterMixing(_productKind);
 
         _definition = CreateBuilder(template, baggie, jar).Build();
-        _crystalDefinition = CreateCrystalBuilder(template, baggie, jar).Build();
+        _crystalDefinition = CreateCrystalBuilder().Build();
+        ConfigureCrystalPresentation(crystalSource);
         _tabletPressIcon ??=
             ImageUtils.LoadImageFromResource(
                 typeof(MdmaModule).Assembly,
@@ -151,11 +160,13 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     2)
                 .WithIngredient("acid", 1)
                 .WithIngredient("phosphorus", 1)
-                .WithProduct(MdmaProductIds.Crystals, ManualTabletPressRuntime.BatchSize));
+                .WithProduct(
+                    MdmaProductIds.Crystals,
+                    ManualTabletPressQuantities.ChemistryCrystalYield));
 
         _logger.Msg(
-            $"Registered MDMA products '{MdmaProductIds.Crystals}' and " +
-            $"'{MdmaProductIds.Tablets}', tablet press '{TabletPressItemId}', " +
+            $"Registered MDMA crystal intermediate '{MdmaProductIds.Crystals}', " +
+            $"product '{MdmaProductIds.Tablets}', tablet press '{TabletPressItemId}', " +
             $"and chemistry recipe '{RecipeId}'.");
     }
 
@@ -189,7 +200,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         }
 
         _definition.Discover(listForSale: true);
-        EnsureCrystalsRemainIntermediate();
+        TryGenerateCrystalIcon();
         TryGenerateTabletPressIcon();
 
         if (!_tabletPressAddedToShop)
@@ -215,11 +226,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             descriptor.ProductId,
             MdmaProductIds.Tablets,
             StringComparison.OrdinalIgnoreCase);
-        bool isCrystals = string.Equals(
-            descriptor.ProductId,
-            MdmaProductIds.Crystals,
-            StringComparison.OrdinalIgnoreCase);
-        if (!isTablets && !isCrystals)
+        if (!isTablets)
         {
             return null;
         }
@@ -243,14 +250,9 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 .Build();
 
         GameObject pillSource = _heartPill.GetOrLoad();
-        GameObject crystalSource = _mdmaCrystals.GetOrLoad();
         EnsurePresentationRegistered(template, pillSource);
-        EnsureCrystalPresentationRegistered(crystalSource);
         EnsurePackagingRegistered(pillSource);
-        EnsureCrystalPackagingRegistered(crystalSource);
-        return isTablets
-            ? CreateBuilder(template, baggie, jar)
-            : CreateCrystalBuilder(template, baggie, jar);
+        return CreateBuilder(template, baggie, jar);
     }
 
     public void Dispose()
@@ -308,32 +310,20 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 ProviderData);
     }
 
-    private CustomProductDefinitionBuilder CreateCrystalBuilder(
-        ProductDefinition template,
-        PackagingDefinition baggie,
-        PackagingDefinition jar)
+    private static S1API.Items.Quality.QualityItemDefinitionBuilder
+        CreateCrystalBuilder()
     {
-        ProductKind kind = _productKind ??
-            throw new InvalidOperationException("MDMA product kind is not registered.");
-
-        return CustomProductItemCreator
-            .CreateBuilder(MdmaProductIds.Crystals, kind)
-            .WithName("MDMA Crystals")
-            .WithDescription(
-                "An unpressed MDMA batch ready for the Manual Tablet Press.")
-            .WithProductPrice(140f)
-            .WithProperties(Property.Energizing, Property.Focused)
+        return S1API.Items.Quality.QualityItemCreator
+            .CloneFrom("cocaleaf")
+            .WithBasicInfo(
+                MdmaProductIds.Crystals,
+                "MDMA Crystals",
+                "An unpressed MDMA batch ready for the Manual Tablet Press.",
+                ItemCategory.Ingredient)
+            .WithStackLimit(20)
+            .WithPricing(basePurchasePrice: 0f, resellMultiplier: 0f)
             .WithLegalStatus(LegalStatus.Illegal)
-            .WithBaseAddictiveness(0.35f)
-            .WithDefaultQuality(Quality.Premium)
-            .WithRepresentationsFrom(template)
-            .WithValidPackaging(baggie, jar)
-            .WithEffectDurations(playerSeconds: 180, npcSeconds: 240)
-            .WithNativeMixerMap(ProductMixingMap.Cocaine)
-            .WithSaveProvider(
-                DrugCatalog.SaveProviderId,
-                DrugCatalog.SaveProviderVersion,
-                ProviderData);
+            .WithDefaultQuality(Quality.Premium);
     }
 
     private void EnsurePresentationRegistered(
@@ -362,6 +352,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             new ProductPresentationProfileBuilder()
                 .WithLooseVisual(() => pillSource, pillPose)
                 .WithHeldVisual(() => pillSource, heldPillPose)
+                .WithFunctionalProductConvexMeshColliders()
                 .WithGeneratedIconFromLooseVisual(
                     size: 512,
                     fitToCamera: true,
@@ -422,78 +413,23 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             _jarProfile);
     }
 
-    private void EnsureCrystalPresentationRegistered(GameObject crystalSource)
+    private void ConfigureCrystalPresentation(GameObject crystalSource)
     {
-        ProductPresentationTransform loosePose =
-            new ProductPresentationTransform(
-                Vector3.zero,
-                Vector3.zero,
-                Vector3.one);
-        ProductPresentationTransform heldPose =
-            new ProductPresentationTransform(
-                new Vector3(0f, 0f, 0.01f),
-                new Vector3(18f, -10f, 12f),
-                Vector3.one * 0.75f);
+        S1ItemFramework.QualityItemDefinition definition =
+            GetNativeQualityDefinition(MdmaProductIds.Crystals) ??
+            throw new InvalidOperationException(
+                "The registered MDMA crystal definition is unavailable.");
+        S1ItemFramework.QualityItemDefinition template =
+            GetNativeQualityDefinition("cocaleaf") ??
+            throw new InvalidOperationException(
+                "The native coca-leaf presentation scaffold is unavailable.");
 
-        _crystalPresentationProfile ??=
-            new ProductPresentationProfileBuilder()
-                .WithLooseVisual(() => crystalSource, loosePose)
-                .WithHeldVisual(() => crystalSource, heldPose)
-                .WithGeneratedIconFromLooseVisual(
-                    size: 512,
-                    fitToCamera: true,
-                    cameraFill: 0.92f)
-                .WithGeneratedIconTransform(
-                    new ProductPresentationTransform(
-                        Vector3.zero,
-                        new Vector3(45f, 0f, 0f),
-                        Vector3.one))
-                .Require(
-                    ProductPresentationContext.Loose,
-                    ProductPresentationContext.Stored,
-                    ProductPresentationContext.Held,
-                    ProductPresentationContext.Station,
-                    ProductPresentationContext.FunctionalProduct,
-                    ProductPresentationContext.Icon)
-                .Build();
-
-        ProductPresentationProfileRegistry.RegisterForProduct(
-            ModInfo.OwnerId,
-            MdmaProductIds.Crystals,
-            _crystalPresentationProfile);
-    }
-
-    private void EnsureCrystalPackagingRegistered(GameObject crystalSource)
-    {
-        _crystalBaggieProfile ??=
-            new ProductPackagingContentProfileBuilder()
-                .WithContent(() => crystalSource)
-                .AddPlacement(
-                    new ProductPresentationTransform(
-                        new Vector3(0f, -0.004f, 0f),
-                        Vector3.zero,
-                        Vector3.one * 0.52f))
-                .Build();
-        _crystalJarProfile ??=
-            new ProductPackagingContentProfileBuilder()
-                .WithContent(() => crystalSource)
-                .AddPlacement(
-                    new ProductPresentationTransform(
-                        new Vector3(0f, 0.035f, 0f),
-                        new Vector3(0f, 18f, 0f),
-                        Vector3.one * 0.58f))
-                .Build();
-
-        ProductPackagingContentProfileRegistry.Register(
-            ModInfo.OwnerId,
-            MdmaProductIds.Crystals,
-            "baggie",
-            _crystalBaggieProfile);
-        ProductPackagingContentProfileRegistry.Register(
-            ModInfo.OwnerId,
-            MdmaProductIds.Crystals,
-            "jar",
-            _crystalJarProfile);
+        definition.StoredItem =
+            CloneCrystalStoredItem(template, crystalSource);
+        definition.StationItem =
+            CloneCrystalStationItem(template, crystalSource);
+        definition.Equippable =
+            CloneCrystalEquippable(template, crystalSource);
     }
 
     private static ProductPresentationTransform JarPlacement(
@@ -505,6 +441,184 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             new Vector3(x, y, 0f),
             new Vector3(78f, 0f, zRotation),
             Vector3.one * 0.04f);
+    }
+
+    private static S1Storage.StoredItem CloneCrystalStoredItem(
+        S1ItemFramework.QualityItemDefinition template,
+        GameObject crystalSource)
+    {
+        S1Storage.StoredItem stored =
+            UnityEngine.Object.Instantiate(template.StoredItem);
+        PrepareCrystalPrefab(stored.gameObject, "MoreDrugs_MDMA_Crystals_Stored");
+        ReplaceCrystalVisual(
+            stored.gameObject,
+            crystalSource,
+            new Vector3(0f, 0.018f, 0f),
+            new Vector3(0f, 25f, 0f),
+            Vector3.one * 0.62f);
+        return stored;
+    }
+
+    private static S1StationFramework.StationItem CloneCrystalStationItem(
+        S1ItemFramework.QualityItemDefinition template,
+        GameObject crystalSource)
+    {
+        S1StationFramework.StationItem station =
+            UnityEngine.Object.Instantiate(template.StationItem);
+        PrepareCrystalPrefab(
+            station.gameObject,
+            "MoreDrugs_MDMA_Crystals_Station");
+        ReplaceCrystalVisual(
+            station.gameObject,
+            crystalSource,
+            Vector3.zero,
+            new Vector3(0f, 20f, 0f),
+            Vector3.one * 0.62f);
+        return station;
+    }
+
+    private static S1Equipping.Equippable CloneCrystalEquippable(
+        S1ItemFramework.QualityItemDefinition template,
+        GameObject crystalSource)
+    {
+        S1Equipping.Equippable equippable =
+            UnityEngine.Object.Instantiate(template.Equippable);
+        PrepareCrystalPrefab(
+            equippable.gameObject,
+            "MoreDrugs_MDMA_Crystals_Equippable");
+        ReplaceCrystalVisual(
+            equippable.gameObject,
+            crystalSource,
+            new Vector3(0f, 0f, 0.01f),
+            new Vector3(-72f, 80f, 12f),
+            Vector3.one * 0.75f);
+
+        S1Equipping.Equippable_Viewmodel? viewmodel =
+            AsViewmodel(equippable);
+        if (viewmodel != null)
+        {
+            viewmodel.AvatarEquippable =
+                CreateCrystalAvatarEquippable(
+                    viewmodel.AvatarEquippable,
+                    crystalSource);
+        }
+
+        return equippable;
+    }
+
+    private static S1AvatarEquipping.AvatarEquippable
+        CreateCrystalAvatarEquippable(
+            S1AvatarEquipping.AvatarEquippable? template,
+            GameObject crystalSource)
+    {
+        var root =
+            new GameObject("MoreDrugs_MDMA_Crystals_AvatarEquippable");
+        PrepareCrystalPrefab(root, root.name);
+        ReplaceCrystalVisual(
+            root,
+            crystalSource,
+            Vector3.zero,
+            new Vector3(-72f, 80f, 12f),
+            Vector3.one * 0.75f);
+
+        S1AvatarEquipping.AvatarEquippable avatar =
+            root.AddComponent<S1AvatarEquipping.AvatarEquippable>();
+        avatar.AlignmentPoint = root.transform;
+        avatar.AssetPath = CrystalAvatarPath;
+        if (template != null)
+        {
+            avatar.Suspiciousness = template.Suspiciousness;
+            avatar.Hand = template.Hand;
+            avatar.TriggerType = template.TriggerType;
+            avatar.AnimationTrigger = template.AnimationTrigger;
+        }
+
+        if (!AvatarEquippableRegistry.RegisterAvatarEquippable(
+                CrystalAvatarPath,
+                root))
+        {
+            throw new InvalidOperationException(
+                $"Could not register the crystal avatar presentation at '{CrystalAvatarPath}'.");
+        }
+
+        return avatar;
+    }
+
+    private static void PrepareCrystalPrefab(GameObject root, string name)
+    {
+        root.name = name;
+        root.hideFlags = HideFlags.HideAndDontSave;
+        root.transform.position = new Vector3(0f, -20000f, 0f);
+        UnityEngine.Object.DontDestroyOnLoad(root);
+        root.SetActive(true);
+    }
+
+    private static void ReplaceCrystalVisual(
+        GameObject scaffold,
+        GameObject crystalSource,
+        Vector3 localPosition,
+        Vector3 localEulerAngles,
+        Vector3 localScale)
+    {
+        foreach (Renderer renderer in
+                 scaffold.GetComponentsInChildren<Renderer>(true))
+        {
+            renderer.enabled = false;
+        }
+
+        foreach (Collider collider in
+                 scaffold.GetComponentsInChildren<Collider>(true))
+        {
+            collider.enabled = false;
+        }
+
+        GameObject visual = UnityEngine.Object.Instantiate(crystalSource);
+        visual.name = "MoreDrugs_MDMA_Crystals_Visual";
+        visual.transform.SetParent(scaffold.transform, false);
+        visual.transform.localPosition = localPosition;
+        visual.transform.localEulerAngles = localEulerAngles;
+        visual.transform.localScale = localScale;
+        visual.SetActive(true);
+    }
+
+    private void TryGenerateCrystalIcon()
+    {
+        if (_crystalIconGenerated || _crystalDefinition == null)
+            return;
+
+        GameObject? iconRoot = null;
+        try
+        {
+            iconRoot = new GameObject("MoreDrugs_MDMA_Crystals_IconSource");
+            GameObject visual =
+                UnityEngine.Object.Instantiate(_mdmaCrystals.GetOrLoad());
+            visual.transform.SetParent(iconRoot.transform, false);
+            visual.transform.localEulerAngles = new Vector3(45f, 0f, 0f);
+            visual.transform.localScale = Vector3.one * 1.15f;
+            visual.SetActive(true);
+
+            Sprite? icon = IconFactory.GenerateIconSprite(
+                iconRoot.transform,
+                size: 512,
+                bakeSkinnedMeshes: true,
+                fitToCamera: true,
+                cameraFill: 1.04f);
+            if (icon == null)
+                return;
+
+            _crystalDefinition.Icon = icon;
+            _crystalIconGenerated = true;
+        }
+        catch (Exception exception)
+        {
+            _logger.Warning(
+                $"MDMA crystal icon generation will retry after the next load: {exception.Message}");
+        }
+        finally
+        {
+            if (iconRoot != null)
+                UnityEngine.Object.Destroy(iconRoot);
+        }
     }
 
     private void TryGenerateTabletPressIcon()
@@ -559,28 +673,6 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         }
     }
 
-    private void EnsureCrystalsRemainIntermediate()
-    {
-        S1Product.ProductDefinition? nativeDefinition =
-            GetNativeProductDefinition(MdmaProductIds.Crystals);
-        if (nativeDefinition == null)
-        {
-            _logger.Warning(
-                "MDMA crystals could not be removed from product discovery because their native definition is unavailable.");
-            return;
-        }
-
-        bool removedFromListings =
-            S1Product.ProductManager.ListedProducts.Remove(nativeDefinition);
-        bool removedFromDiscovery =
-            S1Product.ProductManager.DiscoveredProducts.Remove(nativeDefinition);
-        if (removedFromListings || removedFromDiscovery)
-        {
-            _logger.Msg(
-                "Migrated MDMA crystals to an unfinished production intermediate; they are no longer listed or shown in Product Manager.");
-        }
-    }
-
     private static GameObject CreateConsumptionSource(
         GameObject pillSource,
         ProductPresentationTransform pillPose)
@@ -614,6 +706,28 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         return S1.Registry.GetItem(itemId)?.TryCast<S1Product.ProductDefinition>();
 #else
         return S1.Registry.GetItem(itemId) as S1Product.ProductDefinition;
+#endif
+    }
+
+    private static S1ItemFramework.QualityItemDefinition?
+        GetNativeQualityDefinition(string itemId)
+    {
+#if IL2CPPMELON
+        return S1.Registry.GetItem(itemId)
+            ?.TryCast<S1ItemFramework.QualityItemDefinition>();
+#else
+        return S1.Registry.GetItem(itemId) as
+            S1ItemFramework.QualityItemDefinition;
+#endif
+    }
+
+    private static S1Equipping.Equippable_Viewmodel? AsViewmodel(
+        S1Equipping.Equippable equippable)
+    {
+#if IL2CPPMELON
+        return equippable.TryCast<S1Equipping.Equippable_Viewmodel>();
+#else
+        return equippable as S1Equipping.Equippable_Viewmodel;
 #endif
     }
 }
