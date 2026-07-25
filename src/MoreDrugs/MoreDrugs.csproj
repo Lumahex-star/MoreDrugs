@@ -35,7 +35,6 @@
     <Reference Include="S1MAPI_Mono" HintPath="$(MApiMonoPath)" Private="false" />
     <Reference Include="UnityEngine" HintPath="$(MonoAssembliesPath)\UnityEngine.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(MonoAssembliesPath)\UnityEngine.CoreModule.dll" Private="false" />
-    <Reference Include="UnityEngine.ImageConversionModule" HintPath="$(MonoAssembliesPath)\UnityEngine.ImageConversionModule.dll" Private="false" />
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(MonoAssembliesPath)\UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="UnityEngine.UI" HintPath="$(MonoAssembliesPath)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(MonoAssembliesPath)\Unity.TextMeshPro.dll" Private="false" />
@@ -53,7 +52,6 @@
     <Reference Include="S1MAPI_Il2cpp" HintPath="$(MApiIl2CppPath)" Private="false" />
     <Reference Include="UnityEngine" HintPath="$(Il2CppAssembliesPath)\UnityEngine.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(Il2CppAssembliesPath)\UnityEngine.CoreModule.dll" Private="false" />
-    <Reference Include="UnityEngine.ImageConversionModule" HintPath="$(Il2CppAssembliesPath)\UnityEngine.ImageConversionModule.dll" Private="false" />
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(Il2CppAssembliesPath)\UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="UnityEngine.UI" HintPath="$(Il2CppAssembliesPath)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(Il2CppAssembliesPath)\Unity.TextMeshPro.dll" Private="false" />
