@@ -7,6 +7,7 @@ using S1ObjectScripts = Il2CppScheduleOne.ObjectScripts;
 using S1Product = Il2CppScheduleOne.Product;
 using S1Tiles = Il2CppScheduleOne.Tiles;
 using S1UIStations = Il2CppScheduleOne.UI.Stations;
+using TmpText = Il2CppTMPro.TextMeshProUGUI;
 #elif MONOMELON
 using S1 = ScheduleOne;
 using S1Building = ScheduleOne.Building;
@@ -16,6 +17,7 @@ using S1ObjectScripts = ScheduleOne.ObjectScripts;
 using S1Product = ScheduleOne.Product;
 using S1Tiles = ScheduleOne.Tiles;
 using S1UIStations = ScheduleOne.UI.Stations;
+using TmpText = TMPro.TextMeshProUGUI;
 #endif
 
 using System.Collections;
@@ -275,7 +277,11 @@ internal static class ManualTabletPressRuntime
     internal static void RefreshCanvas(S1UIStations.BrickPressCanvas canvas)
     {
         S1ObjectScripts.BrickPress? press = canvas.Press;
-        if (!IsTabletPress(press) || press == null)
+        bool isTabletPress = IsTabletPress(press);
+        SetCanvasTitle(
+            canvas,
+            isTabletPress ? "Manual Tablet Press" : "Brick Press");
+        if (!isTabletPress || press == null)
             return;
 
         switch (GetState(press))
@@ -300,6 +306,34 @@ internal static class ManualTabletPressRuntime
 
         canvas.InstructionLabel.enabled = true;
         canvas.BeginButton.interactable = false;
+    }
+
+    private static void SetCanvasTitle(
+        S1UIStations.BrickPressCanvas canvas,
+        string title)
+    {
+        Transform? titleTransform =
+            canvas.transform.Find("Container/Top/Title");
+        TmpText? titleLabel =
+            titleTransform?.GetComponent<TmpText>();
+        if (titleLabel == null)
+        {
+            foreach (TmpText candidate in
+                     canvas.GetComponentsInChildren<TmpText>(true))
+            {
+                if (string.Equals(
+                        candidate.name,
+                        "Title",
+                        StringComparison.Ordinal))
+                {
+                    titleLabel = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (titleLabel != null)
+            titleLabel.text = title;
     }
 
     private static void ConsumeCrystals(
@@ -575,6 +609,17 @@ internal sealed class ManualTabletPressInstance
 
     private void ConfigureNativeInteraction()
     {
+        Vector3 cameraFocus =
+            _rig.MouldDetector.position +
+            _rig.Root.transform.up * 0.16f;
+        _rig.CameraPressing.LookAt(
+            cameraFocus,
+            _rig.Root.transform.up);
+        _rig.CameraPouring.LookAt(
+            _rig.MouldDetector.position +
+            _rig.Root.transform.up * 0.08f,
+            _rig.Root.transform.up);
+
         _press.CameraPosition = _rig.CameraPressing;
         _press.CameraPosition_Pouring = _rig.CameraPouring;
         _press.CameraPosition_Raising = _rig.CameraPressing;
