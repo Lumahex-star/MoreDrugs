@@ -205,7 +205,8 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             }
         }
 
-        _definition.Discover(listForSale: true);
+        // Registration and Product Manager presentation metadata must not
+        // implicitly unlock or list MDMA. Progression content owns discovery.
 
         if (!_tabletPressAddedToShop)
         {
