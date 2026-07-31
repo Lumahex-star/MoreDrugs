@@ -2,7 +2,7 @@ namespace MoreDrugs.Content.Mdma.Production;
 
 internal static class ManualTabletPressQuantities
 {
-    internal const int ChemistryCrystalYield = 20;
+    internal const int ChemistryCrystalYield = 10;
 
     internal const int CrystalsPerCycle = 1;
 

@@ -7,7 +7,7 @@ public sealed class ManualTabletPressQuantitiesTests
     [Fact]
     public void ChemistryBatchRequiresOnePressPerCrystal()
     {
-        Assert.Equal(20, ManualTabletPressQuantities.ChemistryCrystalYield);
+        Assert.Equal(10, ManualTabletPressQuantities.ChemistryCrystalYield);
         Assert.Equal(1, ManualTabletPressQuantities.CrystalsPerCycle);
         Assert.Equal(1, ManualTabletPressQuantities.TabletsPerCycle);
         Assert.Equal(

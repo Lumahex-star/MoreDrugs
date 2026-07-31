@@ -92,12 +92,14 @@ internal static class ManualTabletPressRuntime
     private static ManualTabletPressAsset? _pressAsset;
     private static Func<GameObject>? _pillSourceFactory;
     private static Func<GameObject>? _crystalSourceFactory;
+    private static Action? _onSuccessfulPress;
     private static MelonLogger.Instance? _logger;
 
     internal static void Configure(
         ManualTabletPressAsset pressAsset,
         Func<GameObject> pillSourceFactory,
         Func<GameObject> crystalSourceFactory,
+        Action onSuccessfulPress,
         MelonLogger.Instance logger)
     {
         _pressAsset = pressAsset ??
@@ -106,6 +108,8 @@ internal static class ManualTabletPressRuntime
             throw new ArgumentNullException(nameof(pillSourceFactory));
         _crystalSourceFactory = crystalSourceFactory ??
             throw new ArgumentNullException(nameof(crystalSourceFactory));
+        _onSuccessfulPress = onSuccessfulPress ??
+            throw new ArgumentNullException(nameof(onSuccessfulPress));
         _logger = logger ??
             throw new ArgumentNullException(nameof(logger));
     }
@@ -120,6 +124,7 @@ internal static class ManualTabletPressRuntime
         _pressAsset = null;
         _pillSourceFactory = null;
         _crystalSourceFactory = null;
+        _onSuccessfulPress = null;
         _logger = null;
     }
 
@@ -362,6 +367,7 @@ internal static class ManualTabletPressRuntime
 
         press.OutputSlot.AddItem(tablets);
         ConsumeCrystals(press, authoritativeCrystals);
+        _onSuccessfulPress?.Invoke();
         return true;
     }
 

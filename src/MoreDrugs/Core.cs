@@ -1,6 +1,7 @@
 using MelonLoader;
 using MoreDrugs.Content;
 using MoreDrugs.Content.Mdma;
+using MoreDrugs.Content.Mdma.Progression;
 using S1API.Lifecycle;
 using S1API.Products;
 
@@ -38,6 +39,7 @@ public sealed class Core : MelonMod
 
     private void OnPreLoad()
     {
+        MdmaProgressionSave.ResetForIncomingSave();
         _catalog?.RegisterContent();
     }
 

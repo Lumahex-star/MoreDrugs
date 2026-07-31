@@ -17,12 +17,16 @@ using S1StationFramework = ScheduleOne.StationFramework;
 using S1Storage = ScheduleOne.Storage;
 #endif
 
+using System.Collections;
 using MelonLoader;
+using MoreDrugs.Content.Mdma.Precursors;
+using MoreDrugs.Content.Mdma.Progression;
 using MoreDrugs.Content.Mdma.Production;
 using MoreDrugs.Infrastructure;
 using S1API.Console;
 using S1API.Items;
 using S1API.Items.Buildable;
+using S1API.Leveling;
 using S1API.Products;
 using S1API.Properties;
 using S1API.Rendering;
@@ -41,6 +45,10 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     internal const string ProviderData = "mdma";
     internal const string TabletPressItemId =
         "ifbars.moredrugs:stations/manual-tablet-press";
+    private const string BrickPackagingId = "brick";
+
+    private static readonly FullRank ContentUnlockRank =
+        new(Rank.Baron, 1);
 
     private const string HeartPillResource =
         "MoreDrugs.Assets.Models.heartpill.glb";
@@ -57,11 +65,13 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private readonly EmbeddedGlbAsset _mdmaCrystals =
         new EmbeddedGlbAsset(MdmaCrystalsResource, "MoreDrugs_MdmaCrystals");
     private readonly ManualTabletPressAsset _tabletPressAsset = new();
+    private readonly MdmaPrecursorCatalog _precursors;
 
     private ProductKind? _productKind;
     private ProductPresentationProfile? _presentationProfile;
     private ProductPackagingContentProfile? _baggieProfile;
     private ProductPackagingContentProfile? _jarProfile;
+    private ProductPackagingContentProfile? _brickProfile;
     private CustomProductDefinition? _definition;
     private S1API.Items.Quality.QualityItemDefinition? _crystalDefinition;
     private S1API.Items.Buildable.BuildableItemDefinition? _tabletPressDefinition;
@@ -74,16 +84,27 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private bool _tabletPressIconGenerated;
     private bool _crystalIconGenerated;
     private bool _crystalPresentationConfigured;
+    private bool _progressionSubscribed;
+    private bool _daveyAvailabilitySubscribed;
+    private MdmaProgressionData? _lastAppliedProgression;
+    private bool _discoveryAppliedForCurrentProgression;
+    private bool _legacyWarningLoggedForCurrentProgression;
+    private object? _recipeAvailabilityReconciliation;
 
     internal MdmaModule(MelonLogger.Instance logger)
     {
         _logger = logger;
+        _precursors = new MdmaPrecursorCatalog(logger);
     }
 
     public string ProviderDataKey => ProviderData;
 
     public void RegisterContent()
     {
+        _precursors.RegisterContent();
+        EnsureProgressionSubscription();
+        EnsureDaveyAvailabilitySubscription();
+
         if (_definition != null &&
             _crystalDefinition != null &&
             _tabletPressDefinition != null)
@@ -101,6 +122,10 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ItemManager.GetDefinition("jar") as PackagingDefinition ??
             throw new InvalidOperationException(
                 "The native 'jar' packaging definition is unavailable.");
+        PackagingDefinition brick =
+            ItemManager.GetDefinition(BrickPackagingId) as PackagingDefinition ??
+            throw new InvalidOperationException(
+                "The native 'brick' packaging definition is unavailable.");
 
         _productKind ??=
             new ProductKindBuilder(ProductKindId)
@@ -115,7 +140,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         EnsurePackagingRegistered(pillSource);
         RegisterMixing(_productKind);
 
-        _definition = CreateBuilder(template, baggie, jar).Build();
+        _definition = CreateBuilder(template, baggie, jar, brick).Build();
         _crystalDefinition = CreateCrystalBuilder().Build();
         _tabletPressIcon ??=
             ImageUtils.LoadImageFromResource(
@@ -129,7 +154,8 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     "A hand-operated press for converting MDMA crystals into tablets.",
                     ItemCategory.Equipment)
                 .WithBuildSound(S1API.Items.Buildable.BuildSoundType.Metal)
-                .WithPricing(2_500f, 0.5f);
+                .WithPricing(MdmaEconomyPolicy.TabletPressPrice, 0.5f)
+                .WithRequiredRank(ContentUnlockRank);
         if (_tabletPressIcon != null)
         {
             tabletPressBuilder.WithIcon(_tabletPressIcon);
@@ -144,22 +170,26 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             _tabletPressAsset,
             () => _heartPill.GetOrLoad(),
             () => _mdmaCrystals.GetOrLoad(),
+            HandleSuccessfulTabletPress,
             _logger);
 
         _recipe ??=
             ChemistryStationRecipes.CreateAndRegister(builder => builder
                 .WithRecipeId(RecipeId)
-                // StationRecipeEntry appends "(20x)" without a separator. The word
+                // StationRecipeEntry appends the yield without a separator. The word
                 // joiner preserves the preceding display space through S1API's trim.
                 .WithTitle("MDMA Crystals \u2060")
+                .WithInitialAvailability(
+                    isDiscovered: false,
+                    isUnlocked: false)
                 .WithCookTimeMinutes(240)
                 .WithTemperature(220f, 20f)
                 .WithFinalLiquidColor(new Color(0.95f, 0.3f, 0.65f))
                 .WithIngredientOptions(
-                    new[] { "lowqualitypseudo", "pseudo", "highqualitypseudo" },
-                    2)
+                    MdmaPrecursorIds.SafroleOptions,
+                    1)
+                .WithIngredient(MdmaPrecursorIds.Methylamine, 1)
                 .WithIngredient("acid", 1)
-                .WithIngredient("phosphorus", 1)
                 .WithProduct(
                     MdmaProductIds.Crystals,
                     ManualTabletPressQuantities.ChemistryCrystalYield));
@@ -173,12 +203,18 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
 
     public void CompleteLoad()
     {
+        _precursors.CompleteLoad();
+
         if (_definition == null ||
             _crystalDefinition == null ||
             _tabletPressDefinition == null ||
             _productKind == null)
             return;
 
+        MdmaProgressionSave.ReplayLoadedState(
+            HandleProgressionLoaded);
+        ApplyRecipeAvailability(DiscoDavey.IsAvailable);
+        StartRecipeAvailabilityReconciliation();
         TryConfigureCrystalPresentation(_mdmaCrystals.GetOrLoad());
         TryGenerateCrystalIcon();
         TryGenerateTabletPressIcon();
@@ -212,7 +248,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         {
             int shopCount = ShopManager.AddToShops(
                 _tabletPressDefinition,
-                2_500f,
+                MdmaEconomyPolicy.TabletPressPrice,
                 "Handy Hank's Hardware",
                 "Dan's Hardware");
             _tabletPressAddedToShop = shopCount > 0;
@@ -248,6 +284,10 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ItemManager.GetDefinition("jar") as PackagingDefinition ??
             throw new InvalidOperationException(
                 "Cannot restore MDMA without native jar packaging.");
+        PackagingDefinition brick =
+            ItemManager.GetDefinition(BrickPackagingId) as PackagingDefinition ??
+            throw new InvalidOperationException(
+                "Cannot restore MDMA without native brick packaging.");
 
         _productKind ??=
             new ProductKindBuilder(ProductKindId)
@@ -257,17 +297,34 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
         GameObject pillSource = _heartPill.GetOrLoad();
         EnsurePresentationRegistered(template, pillSource);
         EnsurePackagingRegistered(pillSource);
-        return CreateBuilder(template, baggie, jar);
+        return CreateBuilder(template, baggie, jar, brick);
     }
 
     public void Dispose()
     {
+        if (_progressionSubscribed)
+        {
+            MdmaProgressionSave.Loaded -= HandleProgressionLoaded;
+            _progressionSubscribed = false;
+        }
+        if (_daveyAvailabilitySubscribed)
+        {
+            DiscoDavey.AvailabilityChanged -= ApplyRecipeAvailability;
+            _daveyAvailabilitySubscribed = false;
+        }
+        if (_recipeAvailabilityReconciliation != null)
+        {
+            MelonCoroutines.Stop(_recipeAvailabilityReconciliation);
+            _recipeAvailabilityReconciliation = null;
+        }
+
         if (_consumptionSource != null)
             UnityEngine.Object.Destroy(_consumptionSource);
 
         _consumptionSource = null;
         ManualTabletPressRuntime.Reset();
         _tabletPressAsset.Dispose();
+        _precursors.Dispose();
         _mdmaCrystals.Dispose();
         _heartPill.Dispose();
     }
@@ -288,10 +345,134 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                 .Build();
     }
 
+    private void EnsureProgressionSubscription()
+    {
+        if (_progressionSubscribed)
+            return;
+
+        MdmaProgressionSave.Loaded += HandleProgressionLoaded;
+        _progressionSubscribed = true;
+    }
+
+    private void EnsureDaveyAvailabilitySubscription()
+    {
+        if (_daveyAvailabilitySubscribed)
+            return;
+
+        DiscoDavey.AvailabilityChanged += ApplyRecipeAvailability;
+        _daveyAvailabilitySubscribed = true;
+    }
+
+    private void ApplyRecipeAvailability(bool available)
+    {
+        if (_recipe == null)
+            return;
+
+        _recipe.SetAvailability(
+            isDiscovered: available,
+            isUnlocked: available);
+        _logger.Msg(
+            $"MDMA chemistry recipe availability set to {available} " +
+            $"from Disco Davey's unlock state.");
+    }
+
+    private void StartRecipeAvailabilityReconciliation()
+    {
+        if (_recipeAvailabilityReconciliation != null)
+            MelonCoroutines.Stop(_recipeAvailabilityReconciliation);
+
+        _recipeAvailabilityReconciliation =
+            MelonCoroutines.Start(ReconcileRecipeAvailabilityAfterLoad());
+    }
+
+    private IEnumerator ReconcileRecipeAvailabilityAfterLoad()
+    {
+        const int maxAttempts = 120;
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            if (DiscoDavey.IsRelationshipUnlocked)
+            {
+                ApplyRecipeAvailability(available: true);
+                _recipeAvailabilityReconciliation = null;
+                yield break;
+            }
+
+            yield return new WaitForSecondsRealtime(0.25f);
+        }
+
+        _recipeAvailabilityReconciliation = null;
+    }
+
+    private void HandleSuccessfulTabletPress()
+    {
+        if (!MdmaProgressionSave.MarkFirstTabletPressed())
+            return;
+
+        if (_definition == null)
+        {
+            _logger.Warning(
+                "The first MDMA tablet was pressed before its product definition was ready; discovery will retry from save data.");
+            return;
+        }
+
+        try
+        {
+            _definition.Discover(listForSale: false);
+            _lastAppliedProgression = MdmaProgressionSave.Current;
+            _discoveryAppliedForCurrentProgression = true;
+            _logger.Msg(
+                "MDMA was discovered after the first successful tablet press; listing remains a player choice.");
+        }
+        catch (Exception exception)
+        {
+            _logger.Warning(
+                $"MDMA discovery will retry from saved progression: {exception.Message}");
+        }
+    }
+
+    private void HandleProgressionLoaded(MdmaProgressionData progression)
+    {
+        if (_definition == null)
+            return;
+
+        if (!ReferenceEquals(_lastAppliedProgression, progression))
+        {
+            _lastAppliedProgression = progression;
+            _discoveryAppliedForCurrentProgression = false;
+            _legacyWarningLoggedForCurrentProgression = false;
+        }
+
+        if (MdmaProgressionPolicy.ShouldDiscover(
+                progression.HasPressedFirstTablet))
+        {
+            if (_discoveryAppliedForCurrentProgression)
+                return;
+
+            try
+            {
+                _definition.Discover(listForSale: false);
+                _discoveryAppliedForCurrentProgression = true;
+            }
+            catch (Exception exception)
+            {
+                _logger.Warning(
+                    $"Saved MDMA discovery could not be restored yet: {exception.Message}");
+            }
+        }
+        else if (progression.LegacyDiscoveryStatePreserved &&
+                 !_legacyWarningLoggedForCurrentProgression)
+        {
+            _logger.Warning(
+                "This save predates MDMA progression tracking and already knew or listed MDMA. Its ambiguous legacy state was preserved instead of being destructively rewritten.");
+            _legacyWarningLoggedForCurrentProgression = true;
+        }
+    }
+
     private CustomProductDefinitionBuilder CreateBuilder(
         ProductDefinition template,
         PackagingDefinition baggie,
-        PackagingDefinition jar)
+        PackagingDefinition jar,
+        PackagingDefinition brick)
     {
         ProductKind kind = _productKind ??
             throw new InvalidOperationException("MDMA product kind is not registered.");
@@ -300,13 +481,13 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             .CreateBuilder(ProductId, kind)
             .WithName("MDMA")
             .WithDescription("Heart-shaped MDMA tablets.")
-            .WithProductPrice(180f)
+            .WithProductPrice(MdmaEconomyPolicy.ProductPrice)
             .WithProperties(Property.Energizing, Property.Focused)
             .WithLegalStatus(LegalStatus.Illegal)
             .WithBaseAddictiveness(0.35f)
             .WithDefaultQuality(Quality.Premium)
             .WithRepresentationsFrom(template)
-            .WithValidPackaging(baggie, jar)
+            .WithValidPackaging(baggie, jar, brick)
             .WithEffectDurations(playerSeconds: 180, npcSeconds: 240)
             .WithNativeMixerMap(ProductMixingMap.Cocaine)
             .WithSaveProvider(
@@ -411,6 +592,13 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
                     JarPlacement(-0.02f, 0.13f, 65f),
                     JarPlacement(0.025f, 0.13f, -62f))
                 .Build();
+        Material brickMaterial = GetHeartPillMaterial(pillSource);
+        _brickProfile ??=
+            new ProductPackagingContentProfileBuilder()
+                .WithNativeFilledVisualScaffold(
+                    ProductPackagingVisualTemplate.Cocaine,
+                    clone => ApplyMdmaBrickMaterial(clone, brickMaterial))
+                .Build();
 
         ProductPackagingContentProfileRegistry.Register(
             ModInfo.OwnerId,
@@ -422,6 +610,11 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ProductId,
             "jar",
             _jarProfile);
+        ProductPackagingContentProfileRegistry.Register(
+            ModInfo.OwnerId,
+            ProductId,
+            BrickPackagingId,
+            _brickProfile);
         ProductPackagingContentProfileRegistry.RegisterForProductKind(
             ModInfo.OwnerId,
             ProductKindId,
@@ -432,6 +625,56 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
             ProductKindId,
             "jar",
             _jarProfile);
+        ProductPackagingContentProfileRegistry.RegisterForProductKind(
+            ModInfo.OwnerId,
+            ProductKindId,
+            BrickPackagingId,
+            _brickProfile);
+    }
+
+    private static Material GetHeartPillMaterial(GameObject pillSource)
+    {
+        foreach (Renderer renderer in
+                 pillSource.GetComponentsInChildren<Renderer>(true))
+        {
+            foreach (Material material in renderer.sharedMaterials)
+            {
+                if (material != null)
+                    return material;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "The MDMA heart-pill asset does not provide a material for brick visuals.");
+    }
+
+    private static void ApplyMdmaBrickMaterial(
+        GameObject scaffold,
+        Material material)
+    {
+        bool customized = false;
+        foreach (Renderer renderer in
+                 scaffold.GetComponentsInChildren<Renderer>(true))
+        {
+            if (!renderer.name.StartsWith(
+                    "Brick_LOD",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Material[] materials = renderer.sharedMaterials;
+            for (int i = 0; i < materials.Length; i++)
+                materials[i] = material;
+            renderer.sharedMaterials = materials;
+            customized = true;
+        }
+
+        if (!customized)
+        {
+            throw new InvalidOperationException(
+                "The native cocaine brick scaffold did not contain Brick_LOD renderers.");
+        }
     }
 
     private void TryConfigureCrystalPresentation(GameObject crystalSource)
@@ -594,10 +837,7 @@ internal sealed class MdmaModule : IDrugContentModule, IMixingCapability
     private static void PrepareCrystalPrefab(GameObject root, string name)
     {
         root.name = name;
-        root.hideFlags = HideFlags.HideAndDontSave;
-        root.transform.position = new Vector3(0f, -20000f, 0f);
-        UnityEngine.Object.DontDestroyOnLoad(root);
-        root.SetActive(true);
+        RuntimePrefabCache.Store(root);
     }
 
     private static void ReplaceCrystalVisual(

@@ -35,6 +35,7 @@
     <Reference Include="S1MAPI_Mono" HintPath="$(MApiMonoPath)" Private="false" />
     <Reference Include="UnityEngine" HintPath="$(MonoAssembliesPath)\UnityEngine.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(MonoAssembliesPath)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.ParticleSystemModule" HintPath="$(MonoAssembliesPath)\UnityEngine.ParticleSystemModule.dll" Private="false" />
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(MonoAssembliesPath)\UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="UnityEngine.UI" HintPath="$(MonoAssembliesPath)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(MonoAssembliesPath)\Unity.TextMeshPro.dll" Private="false" />
@@ -52,6 +53,7 @@
     <Reference Include="S1MAPI_Il2cpp" HintPath="$(MApiIl2CppPath)" Private="false" />
     <Reference Include="UnityEngine" HintPath="$(Il2CppAssembliesPath)\UnityEngine.dll" Private="false" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(Il2CppAssembliesPath)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.ParticleSystemModule" HintPath="$(Il2CppAssembliesPath)\UnityEngine.ParticleSystemModule.dll" Private="false" />
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(Il2CppAssembliesPath)\UnityEngine.PhysicsModule.dll" Private="false" />
     <Reference Include="UnityEngine.UI" HintPath="$(Il2CppAssembliesPath)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(Il2CppAssembliesPath)\Unity.TextMeshPro.dll" Private="false" />
@@ -66,6 +68,16 @@
                       LogicalName="MoreDrugs.Assets.Models.manual_tablet_press.glb" />
     <EmbeddedResource Include="Assets\Models\mdma_crystals.glb"
                       LogicalName="MoreDrugs.Assets.Models.mdma_crystals.glb" />
+    <EmbeddedResource Include="Assets\Models\disco_davey_accessories.glb"
+                      LogicalName="MoreDrugs.Assets.Models.disco_davey_accessories.glb" />
+    <EmbeddedResource Include="Assets\Textures\disco_davey_sneakers.png"
+                      LogicalName="MoreDrugs.Assets.Textures.disco_davey_sneakers.png" />
+    <EmbeddedResource Include="Assets\Textures\disco_davey_rave_jacket.png"
+                      LogicalName="MoreDrugs.Assets.Textures.disco_davey_rave_jacket.png" />
+    <EmbeddedResource Include="Assets\Models\methylamine.glb"
+                      LogicalName="MoreDrugs.Assets.Models.methylamine.glb" />
+    <EmbeddedResource Include="Assets\Models\safrole.glb"
+                      LogicalName="MoreDrugs.Assets.Models.safrole.glb" />
   </ItemGroup>
 
   <Target Name="ValidateBuildPaths" BeforeTargets="ResolveReferences">
