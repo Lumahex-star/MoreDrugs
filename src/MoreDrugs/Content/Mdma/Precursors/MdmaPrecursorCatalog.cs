@@ -566,12 +566,6 @@ internal sealed class MdmaPrecursorCatalog : IDisposable
         nativeRenderer.enabled = true;
         volumeMarker.gameObject.SetActive(false);
 
-        foreach (ParticleSystem particles in pourable.PourParticles)
-        {
-            if (particles != null)
-                particles.transform.SetParent(pourable.PourPoint, true);
-        }
-
         pourable.PourPoint.SetParent(pourPointMarker.parent, false);
         CopyLocalTransform(pourPointMarker, pourable.PourPoint);
         if (!isMethylamine)
@@ -582,11 +576,27 @@ internal sealed class MdmaPrecursorCatalog : IDisposable
                 pourable.Draggable.transform.rotation *
                 nativePourRotation;
         }
+
+        foreach (ParticleSystem particles in pourable.PourParticles)
+        {
+            if (particles == null)
+                continue;
+
+            particles.transform.SetParent(
+                pourable.PourPoint,
+                true);
+        }
+
         pourPointMarker.gameObject.SetActive(false);
         cap.gameObject.SetActive(false);
 
         if (!isMethylamine)
         {
+            Transform neckRing = RequireDescendant(
+                visual,
+                "SafroleNeckRing");
+            neckRing.gameObject.SetActive(false);
+
             Transform? decorativeLiquid =
                 FindDescendant(visual, "SafroleLiquid");
             if (decorativeLiquid != null)
