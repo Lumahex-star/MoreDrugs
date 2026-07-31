@@ -1,4 +1,4 @@
-# Disco Davey and MDMA Precursor Integration Plan
+# Disco Davey and MDMA Precursor Integration
 
 ## Goals
 
@@ -15,10 +15,12 @@
 Registration is not progression. Building the MDMA definition and registering
 its Product Manager metadata must not discover or list it.
 
-Recommended progression:
+Implemented progression:
 
 1. Disco Davey begins locked and unknown as a supplier.
-2. A later introduction objective unlocks Davey and his precursor listings.
+2. Uptown opens at Baron I. Successful deals with Herbert Bleuball or Tobias
+   Wentworth build the relationship needed for a native supplier
+   recommendation, which unlocks Davey and his precursor listings.
 3. Davey sells Safrole in three quality tiers and one fixed-quality Methylamine
    item.
 4. The Chemistry Station recipe becomes available with the supplier introduction,
@@ -34,10 +36,10 @@ MDMA as a market-ready product before they have made it.
 ### Previously affected saves
 
 The old build persisted MDMA in the native discovered/listed product collections.
-The initial bug fix stops adding it on load but does not blindly remove saved
-state. Once MoreDrugs owns a versioned progression record, a one-time migration
-can remove legacy discovery/listing only when that record proves the player has
-never legitimately completed an MDMA batch.
+The current version owns a versioned progression record and no longer adds those
+states on load. If an older save has no progression record but already knows or
+lists MDMA, that ambiguous state is marked and preserved. The migration does not
+silently erase a state that may have resulted from legitimate play.
 
 ## Content Identities
 
@@ -58,7 +60,7 @@ Console aliases can expose `safrole`, `safrolelow`, `safrolehigh`, and
 
 ### Safrole
 
-Implement three registered `QualityItemDefinition` records, following the native
+Three registered `QualityItemDefinition` records follow the native
 pseudo supplier pattern:
 
 | Variant | Default quality | Initial price target | Role |
@@ -76,7 +78,7 @@ discoverable in Product Manager, or sellable to customers.
 
 ### Methylamine
 
-Implement one fixed-quality storable ingredient initially. Its purpose is to
+Methylamine is one fixed-quality storable ingredient. Its purpose is to
 create a supply bottleneck and a second supplier-order decision, not another
 quality axis. It is not consumable, packageable, or customer-sellable.
 
@@ -85,7 +87,7 @@ quality variants additively rather than changing the original item identity.
 
 ## Disco Davey
 
-Implement `DiscoDavey : S1API.Entities.NPC` as a physical supplier:
+`DiscoDavey : S1API.Entities.NPC` is a physical supplier:
 
 - `IsPhysical => true`
 - `IsSupplier => true`
@@ -93,7 +95,10 @@ Implement `DiscoDavey : S1API.Entities.NPC` as a physical supplier:
 - locked relationship defaults using `SetUnlocked(false)`
 - native supplier infrastructure through `WithSupplierDefaults(...)`
 - delivery listings for all three Safrole variants and Methylamine
-- host-authoritative unlock through `NPCSupplier.Unlock()`
+- Uptown region assignment
+- recommendation connections to Herbert Bleuball and Tobias Wentworth
+- host-authoritative unlock through the native successful-deal recommendation
+  flow once either connection reaches the game's supplier threshold
 
 Character direction:
 
@@ -101,7 +106,8 @@ Character direction:
 - colorful party clothes, slightly disheveled appearance, sunglasses or another
   nightlife accessory;
 - the `hippie` or `tyler` voice family at a modest pitch adjustment;
-- a late-day/night schedule around a nightlife-adjacent public location;
+- hidden while idle, using the native supplier meeting flow when the player
+  requests a physical meetup;
 - supplier text that hints at parties and an off-book chemical connection
   without giving real synthesis instructions.
 
@@ -110,8 +116,11 @@ Suggested supplier copy:
 - Recommendation: `My friend Disco Davey always knows where the afterparty is. He can also get some unusual lab supplies. I've passed your number on to him.`
 - Unlock hint: `You can now order Safrole and Methylamine from Disco Davey. They are precursor supplies for your MDMA operation.`
 
-Spawn position, precise schedule locations, appearance paths, and the recommending
-NPC remain explicit review decisions after an in-game location pass.
+The current appearance keeps the native avatar, Sneakers, and CollarJacket rigs.
+Original transparent paint overlays add the blue-purple rave palette at runtime,
+and an original fitted GLB adds the full festival sling bag. Davey has no
+ordinary roaming schedule: S1API reserves only the location-dialogue action used
+by the native supplier meetup system.
 
 ## Production Integration
 
@@ -129,12 +138,33 @@ Do not discover MDMA when Davey unlocks, when ingredients are purchased, or when
 crystals are created. Discover it after the first successful tablet press output,
 without automatically listing it.
 
+## Economy and Late-Game Pacing
+
+The production values deliberately make MDMA the highest-priced base product
+without allowing the old 20-tablet batch to dominate every native production
+line:
+
+| Measure | MDMA | Native comparison |
+| --- | ---: | ---: |
+| Base sale price | $220 | Cocaine: $150 |
+| Batch output | 10 tablets | Cocaine chain: 10 units |
+| Raw batch cost | $200-$275 | Cocaine reference inputs: $205 |
+| Gross batch revenue | $2,200 | Cocaine: $1,500 |
+| Gross batch profit before packaging | $1,925-$2,000 | Cocaine: $1,295 |
+| Dedicated equipment | $5,000 Manual Tablet Press | Cauldron: $3,000 |
+
+The four-hour Chemistry Station cook and ten manual press cycles provide the
+additional labor cost behind that premium. The press requires Baron I, matching
+the final-region relationship gate for Davey, while MDMA itself remains
+undiscovered until the first tablet is successfully pressed.
+
 ## Asset Contracts
 
-Blender 5.2.0 LTS is the current deterministic generation runtime. Each asset
-will use a source-controlled Python generator plus generated `.blend` and `.glb`
-outputs. Game-owned Acid, Phosphorus, and pseudo assets are local visual evidence
-only and will not be redistributed.
+Blender 5.2.0 LTS is the current deterministic generation runtime. Authoring
+`.blend` files and helper scripts remain local; the repository ships only the
+runtime GLBs and original transparent outfit overlays. Game-owned Acid,
+Phosphorus, pseudo, avatar, clothing, and accessory assets are local visual
+evidence only and are not redistributed.
 
 ### Safrole bottle
 
@@ -217,13 +247,13 @@ Recommended GLB hierarchy:
    - Use temporary generated icons only if final GLBs are not ready.
 
 3. **Asset production**
-   - Generate Safrole and Methylamine assets from deterministic Blender scripts.
+   - Generate Safrole and Methylamine runtime GLBs from local Blender sources.
    - Fresh-import validate GLBs.
    - Inspect hero, orthographic, held, stored, station, and icon renders.
 
 4. **Supplier integration**
-   - Add Disco Davey’s supplier prefab, relationship defaults, appearance,
-     schedule, listings, and messaging.
+   - Add Disco Davey's supplier prefab, relationship defaults, appearance,
+     native meeting lifecycle, listings, and messaging.
    - Verify dead drops, meetings, delivery unlocks, save/reload, and late join.
 
 5. **Progression and recipe**

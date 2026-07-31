@@ -26,11 +26,32 @@
              Link="Content\Mdma\Production\ManualTabletPressWheel.cs" />
     <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Production\ManualTabletPressQuantities.cs"
              Link="Content\Mdma\Production\ManualTabletPressQuantities.cs" />
+    <Compile Include="..\..\src\MoreDrugs\Content\Mdma\MdmaEconomyPolicy.cs"
+             Link="Content\Mdma\MdmaEconomyPolicy.cs" />
+    <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Precursors\MdmaPrecursorIds.cs"
+             Link="Content\Mdma\Precursors\MdmaPrecursorIds.cs" />
+    <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Progression\MdmaProgressionPolicy.cs"
+             Link="Content\Mdma\Progression\MdmaProgressionPolicy.cs" />
     <None Include="..\..\src\MoreDrugs\Assets\Models\manual_tablet_press.glb"
           Link="Assets\manual_tablet_press.glb"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\MoreDrugs\Assets\Models\mdma_crystals.glb"
           Link="Assets\mdma_crystals.glb"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MoreDrugs\Assets\Models\disco_davey_accessories.glb"
+          Link="Assets\disco_davey_accessories.glb"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MoreDrugs\Assets\Textures\disco_davey_sneakers.png"
+          Link="Assets\disco_davey_sneakers.png"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MoreDrugs\Assets\Textures\disco_davey_rave_jacket.png"
+          Link="Assets\disco_davey_rave_jacket.png"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MoreDrugs\Assets\Models\methylamine.glb"
+          Link="Assets\methylamine.glb"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MoreDrugs\Assets\Models\safrole.glb"
+          Link="Assets\safrole.glb"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

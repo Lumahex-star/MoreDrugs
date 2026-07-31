@@ -17,16 +17,34 @@ drug type.
   presentation.
 - Native baggie and jar shells populated with custom pill meshes; no extracted
   game packaging assets are redistributed.
-- A Chemistry Station batch recipe that produces 20 MDMA crystals. Crystals
+- A Chemistry Station batch recipe that produces 10 MDMA crystals. Crystals
   are unfinished quality items rather than products: they cannot be packaged,
   consumed, sold to customers, or listed in Product Manager. Their custom
   four-variant GLB remains available for held, stored, station, icon, and press
   presentation.
+- Disco Davey, a persistent native-style supplier connected to Uptown
+  customers Herbert Bleuball and Tobias Wentworth. Davey is recommended after
+  enough successful deals build either relationship, naturally placing him
+  after Uptown opens at Baron I.
+  He sells low-, standard-, and high-grade Safrole plus Methylamine through the
+  native supplier flow. Davey remains hidden while idle and appears only at a
+  player-requested supplier meeting, matching base-game suppliers. His native
+  Sneakers and CollarJacket retain their original mesh, rig, LODs, and texture
+  detail while original transparent overlays add his rave palette at runtime;
+  an original fitted GLB supplies the festival sling bag. Both original
+  low-poly precursor container assets reuse the
+  native Acid station scaffold, so dragging, constrained rotation, pouring,
+  particles, and fill detection remain game behavior rather than custom
+  approximations.
+- The Chemistry Station recipe now requires one Safrole variant, one
+  Methylamine, and one Acid. Producing crystals does not discover MDMA. The
+  first successful tablet-press cycle discovers it without listing it for sale;
+  listing remains an explicit Product Manager action.
 - An original, floor-standing manual tablet-press GLB with a validated
   player-height pedestal, native Brick Press-style handle/ram anchors, and a
   reference press-cycle animation. It is sold at Handy Hank's Hardware and
-  Dan's Hardware. Each full wheel cycle converts one compatible crystal into
-  one heart tablet.
+  Dan's Hardware for $5,000 and requires Baron I. Each full wheel cycle
+  converts one compatible crystal into one heart tablet.
   See
   [the integration contract](docs/manual-tablet-press-integration.md).
 - Save-provider reconstruction, Product Manager metadata, discovery, and listing.
@@ -57,17 +75,28 @@ For a quick manual test, the S1API console aliases are:
 
 ```text
 give tabletpress
-give mdmacrystals 20
+give mdmacrystals 10
 give mdma
+give safrole
+give safrolelow
+give safrolehigh
+give methylamine
 ```
 
-Place the press on a floor grid, insert one or more compatible MDMA crystals,
+For the full production flow, add one Safrole variant, Methylamine, and Acid to
+the Chemistry Station and make a 10-crystal batch. Place the press on a floor
+grid, insert one or more compatible MDMA crystals,
 begin the native-style task, and rotate the wheel clockwise through three full
 turns. Each cycle consumes one crystal and produces one tablet, so processing
-the chemistry station's 20-crystal batch takes 20 separate press cycles. The
+the chemistry station's 10-crystal batch takes 10 separate press cycles. The
 tray animation is local presentation derived from the replicated quantity;
 save/load and late join rebuild a deterministic settled tray rather than
 serializing cosmetic rigidbodies.
+
+Fresh saves keep MDMA undiscovered and unlisted until that first completed
+press. Saves created by older builds may already contain ambiguous native
+discovery or listing state; MoreDrugs preserves that state instead of
+destructively guessing whether it was legitimate.
 
 ## Adding another drug
 
