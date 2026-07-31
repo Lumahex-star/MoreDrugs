@@ -528,6 +528,9 @@ internal sealed class MdmaPrecursorCatalog : IDisposable
         string prefix = isMethylamine
             ? "Methylamine"
             : "Safrole";
+        Quaternion nativePourRotation =
+            Quaternion.Inverse(pourable.Draggable.transform.rotation) *
+            pourable.PourPoint.rotation;
 
         Transform cap = RequireDescendant(
             visual,
@@ -571,6 +574,14 @@ internal sealed class MdmaPrecursorCatalog : IDisposable
 
         pourable.PourPoint.SetParent(pourPointMarker.parent, false);
         CopyLocalTransform(pourPointMarker, pourable.PourPoint);
+        if (!isMethylamine)
+        {
+            // The safrole marker locates the bottle mouth; the acid scaffold's
+            // direction keeps pouring reachable from either station drag side.
+            pourable.PourPoint.rotation =
+                pourable.Draggable.transform.rotation *
+                nativePourRotation;
+        }
         pourPointMarker.gameObject.SetActive(false);
         cap.gameObject.SetActive(false);
 
