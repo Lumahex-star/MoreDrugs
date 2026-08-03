@@ -22,6 +22,7 @@ TRIANGLE_BUDGET = 3500
 POUCH_CENTER = Vector((-0.075, 0.160, 1.185))
 POUCH_SIZE = Vector((0.245, 0.095, 0.210))
 POUCH_TILT_RADIANS = math.radians(-8.0)
+AVATAR_FIT_OFFSET = Vector((0.0, -0.060, 0.090))
 
 
 def pouch_point(offset: Vector) -> Vector:
@@ -526,6 +527,7 @@ def build_model(texture_dir: Path) -> bpy.types.Object:
     result = bpy.context.object
     result.name = MESH_NAME
     result.data.name = f"{MESH_NAME}_Mesh"
+    result.location += AVATAR_FIT_OFFSET
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
     mesh_data = bmesh.new()

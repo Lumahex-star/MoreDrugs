@@ -6,3 +6,4 @@ local.build.props
 artifacts/
 tests/Smoke/
 *.blend1
+/.idea

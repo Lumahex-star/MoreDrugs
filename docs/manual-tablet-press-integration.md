@@ -1,6 +1,6 @@
 # Manual Tablet Press integration
 
-The MoreDrugs tablet press follows the native Brick Press interaction contract,
+The DrugExpansion tablet press follows the native Brick Press interaction contract,
 but it must not reuse the native Brick Press product-conversion rule.
 
 ## Native behavior used as the reference
@@ -8,7 +8,7 @@ but it must not reuse the native Brick Press product-conversion rule.
 Schedule I's Brick Press exposes a narrow and useful mechanical contract:
 
 - The native handle uses a vertical drag projected onto a handle-local plane.
-  MoreDrugs replaces that mouse mapping only for its tablet press with angular
+  DrugExpansion replaces that mouse mapping only for its tablet press with angular
   tracking around the visible wheel center.
 - Three clockwise wheel revolutions map to normalized progress from zero to one.
   Gamepad rotation input continues through the native input path.
@@ -58,11 +58,11 @@ the floor, like the native Brick Press, rather than on furniture.
 
 ## Station implementation boundary
 
-MoreDrugs registers a distinct buildable item definition by cloning the native
+DrugExpansion registers a distinct buildable item definition by cloning the native
 Brick Press definition. The cloned definition deliberately retains the native
 `BuiltItem`, grid footprint, interaction task, item slots, FishNet object, save
 data, and configuration lifecycle. A scoped runtime adapter recognizes only the
-MoreDrugs item ID, hides that instance's native renderers, adds the authored GLB,
+DrugExpansion item ID, hides that instance's native renderers, adds the authored GLB,
 and redirects the native interaction anchors to the GLB contract above.
 
 This consumer-side clone-and-adapt path does not mutate the native Brick Press
@@ -84,7 +84,7 @@ opens on the pressing camera, and enables the wheel immediately. The hidden
 native task objects remain owned by the native cleanup path, so cancellation
 and completion do not leak temporary objects.
 
-The adapter replaces only the native final conversion for the MoreDrugs station:
+The adapter replaces only the native final conversion for the DrugExpansion station:
 
 1. Require at least one compatible MDMA crystal in the input slots.
 2. Preserve the batch identifier, purity, consistency, contamination, and test

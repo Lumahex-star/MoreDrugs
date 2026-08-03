@@ -1,4 +1,4 @@
-"""Validate and render the exported MoreDrugs manual tablet press GLB."""
+"""Validate and render the exported DrugExpansion manual tablet press GLB."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from mathutils import Vector
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GLB_PATH = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Models" / "manual_tablet_press.glb"
+GLB_PATH = REPO_ROOT / "src" / "DrugExpansion" / "Assets" / "Models" / "manual_tablet_press.glb"
 PREVIEW_DIR = REPO_ROOT / "artifacts" / "previews" / "manual-tablet-press"
 PREVIEW_VIEWS = (
     ("idle_front", 1, (1.65, -2.75, 1.45)),

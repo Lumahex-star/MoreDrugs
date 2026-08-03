@@ -47,7 +47,8 @@ Treat these IDs as persistent save contracts:
 
 | Content | Stable ID |
 | --- | --- |
-| Disco Davey | `ifbars.moredrugs:npcs/disco-davey` |
+| Disco Davey runtime NPC | `disco_davey` |
+| Disco Davey supplier persistence | `ifbars.moredrugs:npcs/disco-davey` (legacy; preserves generated supplier shop and delivery state) |
 | Low-quality Safrole | `ifbars.moredrugs:ingredients/safrole-low` |
 | Safrole | `ifbars.moredrugs:ingredients/safrole` |
 | High-quality Safrole | `ifbars.moredrugs:ingredients/safrole-high` |

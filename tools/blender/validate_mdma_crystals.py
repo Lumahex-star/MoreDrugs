@@ -1,4 +1,4 @@
-"""Validate the exported MoreDrugs MDMA crystals GLB in a clean scene."""
+"""Validate the exported DrugExpansion MDMA crystals GLB in a clean scene."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GLB_PATH = (
     REPO_ROOT
     / "src"
-    / "MoreDrugs"
+    / "DrugExpansion"
     / "Assets"
     / "Models"
     / "mdma_crystals.glb"

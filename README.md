@@ -1,6 +1,6 @@
-# MoreDrugs
+# DrugExpansion
 
-MoreDrugs is a real Schedule I mod and a public reference implementation for
+DrugExpansion is a real Schedule I mod and a public reference implementation for
 S1API custom product kinds. Version 1 adds MDMA as the first content module.
 
 The architecture is intentionally not MDMA-specific. Each module owns stable
@@ -63,11 +63,11 @@ simply to become mixable.
 3. Build both runtimes:
 
 ```powershell
-dotnet build .\src\MoreDrugs\MoreDrugs.csproj -c Mono
-dotnet build .\src\MoreDrugs\MoreDrugs.csproj -c Il2cpp
+dotnet build .\src\DrugExpansion\DrugExpansion.csproj -c Mono
+dotnet build .\src\DrugExpansion\DrugExpansion.csproj -c Il2cpp
 ```
 
-Install the matching MoreDrugs DLL in the game `Mods` directory. Install the
+Install the matching DrugExpansion DLL in the game `Mods` directory. Install the
 matching S1API and S1MAPI builds as dependencies. All multiplayer peers need the
 same mod and assets.
 
@@ -95,7 +95,7 @@ serializing cosmetic rigidbodies.
 
 Fresh saves keep MDMA undiscovered and unlisted until that first completed
 press. Saves created by older builds may already contain ambiguous native
-discovery or listing state; MoreDrugs preserves that state instead of
+discovery or listing state; DrugExpansion preserves that state instead of
 destructively guessing whether it was legitimate.
 
 ## Adding another drug
@@ -113,5 +113,5 @@ must not be committed.
 
 ## Licenses
 
-MoreDrugs source code is GPL-3.0-or-later. Bundled assets use the per-asset
+DrugExpansion source code is GPL-3.0-or-later. Bundled assets use the per-asset
 licenses in [ASSET-LICENSE.md](ASSET-LICENSE.md); `heartpill.glb` is CC BY 4.0.
