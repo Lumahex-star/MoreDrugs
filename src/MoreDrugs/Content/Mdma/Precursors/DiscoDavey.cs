@@ -82,6 +82,7 @@ public sealed class DiscoDavey : NPC
             .WithSpawnPosition(HiddenSpawnPosition)
             .EnsureSupplier()
             .WithSupplierDefaults(supplier => supplier
+                .WithPersistentId(MdmaPrecursorIds.DiscoDaveyPersistentId)
                 .WithOrderLimits(100f, 1_800f)
                 .WithStashDeadDrop<BehindBank>()
                 .WithDeliveryItem(MdmaPrecursorIds.SafroleLow)

@@ -3,6 +3,11 @@ namespace MoreDrugs.Content.Mdma.Precursors;
 internal static class MdmaPrecursorIds
 {
     internal const string DiscoDavey =
+        "disco_davey";
+
+    // This ID backed the released supplier's generated shop and delivery state.
+    // Keep it exclusively for the opt-in S1API supplier persistence bridge.
+    internal const string DiscoDaveyPersistentId =
         "ifbars.moredrugs:npcs/disco-davey";
 
     internal const string SafroleLow =
