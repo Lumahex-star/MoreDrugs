@@ -30,6 +30,8 @@
              Link="Content\Mdma\MdmaEconomyPolicy.cs" />
     <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Precursors\MdmaPrecursorIds.cs"
              Link="Content\Mdma\Precursors\MdmaPrecursorIds.cs" />
+    <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Precursors\DiscoDaveyRelationshipDefaults.cs"
+             Link="Content\Mdma\Precursors\DiscoDaveyRelationshipDefaults.cs" />
     <Compile Include="..\..\src\MoreDrugs\Content\Mdma\Progression\MdmaProgressionPolicy.cs"
              Link="Content\Mdma\Progression\MdmaProgressionPolicy.cs" />
     <None Include="..\..\src\MoreDrugs\Assets\Models\manual_tablet_press.glb"

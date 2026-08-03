@@ -93,7 +93,8 @@ public sealed class DiscoDavey : NPC
                 .WithUnlockHint(
                     "Disco Davey can now source MDMA. Check your messages before the next big night."))
             .WithRelationshipDefaults(relationship => relationship
-                .WithDelta(0f)
+                .WithDelta(
+                    DiscoDaveyRelationshipDefaults.InitialRelationshipDelta)
                 .SetUnlocked(false)
                 .SetUnlockType(
                     NPCRelationship.UnlockType.Recommendation)
