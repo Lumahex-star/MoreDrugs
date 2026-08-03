@@ -347,23 +347,15 @@ internal static class ManualTabletPressRuntime
             return true;
         }
 
-        S1Product.ProductItemInstance? tablets =
-            AsProduct(
-                tabletDefinition.GetDefaultInstance(
-                    ManualTabletPressQuantities.TabletsPerCycle));
-        if (tablets == null)
-        {
-            _logger?.Error(
-                "Cannot complete tablet pressing because the tablet definition did not create a product instance.");
-            return true;
-        }
-
-        MdmaBatchProfile tabletProfile =
-            MdmaBatchRegistry.GetOrCreate(authoritativeCrystals).Press(
-                MdmaTabletColor.Pink,
-                MdmaTabletImprint.Heart,
-                string.Empty);
-        MdmaBatchRegistry.Attach(tablets, tabletProfile);
+        MdmaPressedTabletBatch conversion =
+            MdmaTabletPressConversion.Convert(
+                MdmaBatchRegistry.GetOrCreate(authoritativeCrystals),
+                (int)authoritativeCrystals.Quality);
+        var tablets = new S1Product.ProductItemInstance(
+            tabletDefinition,
+            ManualTabletPressQuantities.TabletsPerCycle,
+            (S1ItemFramework.EQuality)conversion.Quality);
+        MdmaBatchRegistry.Attach(tablets, conversion.Profile);
 
         press.OutputSlot.AddItem(tablets);
         ConsumeCrystals(press, authoritativeCrystals);
