@@ -1,4 +1,4 @@
-"""Build the production MoreDrugs manual tablet press and export it as GLB.
+"""Build the production DrugExpansion manual tablet press and export it as GLB.
 
 Run with:
     blender --background --python tools/blender/create_manual_tablet_press.py
@@ -19,8 +19,8 @@ from mathutils import Vector
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Models"
-ICON_DIR = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Icons"
+MODEL_DIR = REPO_ROOT / "src" / "DrugExpansion" / "Assets" / "Models"
+ICON_DIR = REPO_ROOT / "src" / "DrugExpansion" / "Assets" / "Icons"
 SOURCE_DIR = REPO_ROOT / "assets" / "source"
 PREVIEW_DIR = REPO_ROOT / "artifacts" / "previews" / "manual-tablet-press"
 
@@ -854,13 +854,6 @@ def create_press() -> bpy.types.Object:
         vertices=20,
         bevel=0.008,
     )
-    hopper_bracket = box(
-        "HopperBracket",
-        (-0.46, 0.24, 1.44),
-        (0.42, 0.12, 0.10),
-        dark_steel,
-        bevel=0.018,
-    )
     hopper_wiper = torus(
         "HopperWiperRing",
         (-0.15, 0.00, 1.195),
@@ -879,7 +872,6 @@ def create_press() -> bpy.types.Object:
         hopper_body,
         hopper_rim,
         hopper_neck,
-        hopper_bracket,
         hopper_wiper,
         hopper_guard,
     ):
@@ -1166,7 +1158,7 @@ def create_press() -> bpy.types.Object:
 
     feed_assembly.location = (0, 0, 0)
     keyframe_transform(feed_assembly, [FRAME_IDLE, 6], "location")
-    feed_assembly.location = (0.59, 0, 0)
+    feed_assembly.location = (0.78, 0, 0)
     keyframe_transform(feed_assembly, [FRAME_FEED, 17], "location")
     feed_assembly.location = (0, 0, 0)
     keyframe_transform(feed_assembly, [FRAME_FEED_RETRACTED, FRAME_END], "location")
@@ -1315,10 +1307,10 @@ def create_press() -> bpy.types.Object:
     scene.render.fps = 24
 
     root.scale = (0.36, 0.36, 0.36)
-    root["asset_name"] = "MoreDrugs Manual Tablet Press"
+    root["asset_name"] = "DrugExpansion Manual Tablet Press"
     root["asset_version"] = 3
     root["license"] = "GPL-3.0-or-later"
-    root["design"] = "Original MoreDrugs geometry"
+    root["design"] = "Original DrugExpansion geometry"
     root["front_axis"] = "-Y"
     root["animation"] = "PressCycle"
     root["animation_frames"] = f"{FRAME_IDLE}-{FRAME_END}"

@@ -1,4 +1,4 @@
-"""Render the MoreDrugs MDMA crystal-to-tablet press showcase.
+"""Render the DrugExpansion MDMA crystal-to-tablet press showcase.
 
 Run with:
     blender --background --factory-startup --python-exit-code 1 \

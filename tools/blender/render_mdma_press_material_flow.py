@@ -18,7 +18,7 @@ from mathutils import Vector
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Models"
+MODEL_DIR = REPO_ROOT / "src" / "DrugExpansion" / "Assets" / "Models"
 OUTPUT_DIR = REPO_ROOT / "artifacts" / "previews" / "mdma-press-material-flow"
 
 PRESS_PATH = MODEL_DIR / "manual_tablet_press.glb"

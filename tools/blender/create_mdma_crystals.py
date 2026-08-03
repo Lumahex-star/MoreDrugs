@@ -1,4 +1,4 @@
-"""Generate the original MoreDrugs MDMA crystals asset.
+"""Generate the original DrugExpansion MDMA crystals asset.
 
 Run with:
     blender --background --factory-startup --python tools/blender/create_mdma_crystals.py
@@ -19,7 +19,7 @@ from mathutils import Matrix, Vector
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODEL_DIR = REPO_ROOT / "src" / "MoreDrugs" / "Assets" / "Models"
+MODEL_DIR = REPO_ROOT / "src" / "DrugExpansion" / "Assets" / "Models"
 SOURCE_DIR = REPO_ROOT / "assets" / "source"
 PREVIEW_DIR = REPO_ROOT / "artifacts" / "previews" / "mdma-crystals"
 
@@ -418,9 +418,9 @@ def create_crystals() -> bpy.types.Object:
     pile_variant.name = "CrystalPile"
     pile_variant.data.name = "CrystalPile_Mesh"
 
-    root["asset_name"] = "MoreDrugs MDMA Crystals"
+    root["asset_name"] = "DrugExpansion MDMA Crystals"
     root["asset_version"] = 1
-    root["design"] = "Original deterministic MoreDrugs geometry"
+    root["design"] = "Original deterministic DrugExpansion geometry"
     root["license"] = "GPL-3.0-or-later"
     root["units"] = "meters"
     root["front_axis"] = "-Y"
