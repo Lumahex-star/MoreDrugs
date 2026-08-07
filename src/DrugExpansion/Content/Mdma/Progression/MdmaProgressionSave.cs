@@ -53,13 +53,28 @@ public sealed class MdmaProgressionSave : Saveable
             apply(Current);
     }
 
+    internal static void EnsureInitialized()
+    {
+        if (IsLoaded)
+            return;
+
+        _current ??= new MdmaProgressionSave();
+        _current.InitializeState(hadProgressionRecord: false);
+    }
+
+    protected override void OnCreated()
+    {
+        InitializeState(hadProgressionRecord: false);
+    }
+
     protected override void OnLoaded()
     {
         bool hadProgressionRecord = _data != null;
-        _data ??= new MdmaProgressionData();
-        _data.SchemaVersion =
-            MdmaProgressionPolicy.CurrentSchemaVersion;
+        InitializeState(hadProgressionRecord);
+    }
 
+    private void InitializeState(bool hadProgressionRecord)
+    {
         bool discovered = ProductManager.DiscoveredProducts.Any(
             product => string.Equals(
                 product.ID,
@@ -71,23 +86,13 @@ public sealed class MdmaProgressionSave : Saveable
                 MdmaProductIds.Tablets,
                 StringComparison.OrdinalIgnoreCase));
 
-        _data.LegacyDiscoveryStatePreserved |=
-            MdmaProgressionPolicy.ShouldPreserveLegacyState(
-                hadProgressionRecord,
-                discovered,
-                listed);
+        _data = MdmaProgressionPolicy.Initialize(
+            _data,
+            hadProgressionRecord,
+            discovered,
+            listed);
 
         IsLoaded = true;
         Loaded?.Invoke(_data);
     }
-}
-
-public sealed class MdmaProgressionData
-{
-    public int SchemaVersion { get; set; } =
-        MdmaProgressionPolicy.CurrentSchemaVersion;
-
-    public bool HasPressedFirstTablet { get; set; }
-
-    public bool LegacyDiscoveryStatePreserved { get; set; }
 }

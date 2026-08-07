@@ -43,6 +43,7 @@ public sealed class Core : MelonMod
 
     private void OnLoadComplete()
     {
+        MdmaProgressionSave.EnsureInitialized();
         _catalog?.CompleteLoad();
     }
 }

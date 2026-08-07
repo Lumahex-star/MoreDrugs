@@ -6,6 +6,53 @@ namespace DrugExpansion.Tests;
 public sealed class MdmaProgressionPolicyTests
 {
     [Fact]
+    public void NewSaveInitializesProgressionState()
+    {
+        MdmaProgressionData result = MdmaProgressionPolicy.Initialize(
+            data: null,
+            hadProgressionRecord: false,
+            isDiscovered: false,
+            isListed: false);
+
+        Assert.Equal(MdmaProgressionPolicy.CurrentSchemaVersion, result.SchemaVersion);
+        Assert.False(result.HasPressedFirstTablet);
+        Assert.False(result.LegacyDiscoveryStatePreserved);
+    }
+
+    [Fact]
+    public void ExistingProgressionStateIsPreserved()
+    {
+        var existing = new MdmaProgressionData
+        {
+            SchemaVersion = 0,
+            HasPressedFirstTablet = true,
+        };
+
+        MdmaProgressionData result = MdmaProgressionPolicy.Initialize(
+            existing,
+            hadProgressionRecord: true,
+            isDiscovered: true,
+            isListed: false);
+
+        Assert.Same(existing, result);
+        Assert.Equal(MdmaProgressionPolicy.CurrentSchemaVersion, result.SchemaVersion);
+        Assert.True(result.HasPressedFirstTablet);
+        Assert.False(result.LegacyDiscoveryStatePreserved);
+    }
+
+    [Fact]
+    public void MissingLegacyRecordPreservesKnownProductState()
+    {
+        MdmaProgressionData result = MdmaProgressionPolicy.Initialize(
+            data: null,
+            hadProgressionRecord: false,
+            isDiscovered: true,
+            isListed: false);
+
+        Assert.True(result.LegacyDiscoveryStatePreserved);
+    }
+
+    [Fact]
     public void ProductDiscoveryRequiresFirstSuccessfulPress()
     {
         Assert.False(
